@@ -15,9 +15,16 @@
         SnapsToDevicePixels="True">
 
     <Window.Resources>
-        <!-- macOS 26 极简毛玻璃菜单项样式 -->
+        <!-- 默认动态主题笔刷 (深色为默认，会在代码中自适应切换) -->
+        <SolidColorBrush x:Key="MenuBgBrush" Color="#EB1E1E22"/>
+        <SolidColorBrush x:Key="MenuBorderBrush" Color="#40FFFFFF"/>
+        <SolidColorBrush x:Key="MenuItemFgBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#30FFFFFF"/>
+        <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#25FFFFFF"/>
+
+        <!-- macOS 26 极简毛玻璃菜单项样式 (全动态深浅色自适应) -->
         <Style x:Key="MacMenuItemStyle" TargetType="MenuItem">
-            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource MenuItemFgBrush}"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Padding" Value="10,6"/>
@@ -38,12 +45,12 @@
                                 </Grid.ColumnDefinitions>
                                 <ContentPresenter x:Name="IconHost" Grid.Column="0" ContentSource="Icon" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                 <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="CheckMark" Grid.Column="2" Text="✓" FontWeight="Bold" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <TextBlock x:Name="CheckMark" Grid.Column="2" Text="✓" Foreground="#007AFF" FontWeight="Bold" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#30FFFFFF"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource MenuItemHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
@@ -57,20 +64,20 @@
             </Setter>
         </Style>
 
-        <!-- macOS 26 晶体分割线 -->
+        <!-- macOS 26 晶体分割线 (动态自适应) -->
         <Style x:Key="MacSeparatorStyle" TargetType="Separator">
             <Setter Property="Margin" Value="6,4"/>
             <Setter Property="Height" Value="1"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Separator">
-                        <Border Height="1" Background="#25FFFFFF"/>
+                        <Border Height="1" Background="{DynamicResource MenuSeparatorBrush}"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <!-- macOS 26 毛玻璃右键上下文菜单 -->
+        <!-- macOS 26 毛玻璃右键上下文菜单 (动态深浅色自适应) -->
         <ContextMenu x:Key="MacContextMenu" 
                      StaysOpen="False"
                      HasDropShadow="True">
@@ -78,8 +85,8 @@
                 <ControlTemplate TargetType="ContextMenu">
                     <Border x:Name="MenuContainer"
                             CornerRadius="12"
-                            Background="#EB1E1E22"
-                            BorderBrush="#40FFFFFF"
+                            Background="{DynamicResource MenuBgBrush}"
+                            BorderBrush="{DynamicResource MenuBorderBrush}"
                             BorderThickness="1"
                             Padding="3"
                             SnapsToDevicePixels="True">

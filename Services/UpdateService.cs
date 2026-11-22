@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -7,7 +10,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Windows;
 using Date.Models;
-using WpfMessageBox = System.Windows.MessageBox;
+using WpfApplication = System.Windows.Application;
 
 namespace Date.Services;
 
@@ -15,8 +18,17 @@ public class UpdateService
 {
     private static readonly HttpClient HttpClient = new()
     {
-        Timeout = TimeSpan.FromSeconds(10)
+        Timeout = TimeSpan.FromSeconds(15)
     };
+
+    public class ReleaseAsset
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("browser_download_url")]
+        public string BrowserDownloadUrl { get; set; } = string.Empty;
+    }
 
     public class GitHubRelease
     {
@@ -34,6 +46,9 @@ public class UpdateService
 
         [JsonPropertyName("prerelease")]
         public bool Prerelease { get; set; }
+
+        [JsonPropertyName("assets")]
+        public List<ReleaseAsset> Assets { get; set; } = new();
     }
 
     public static Version CurrentVersion
@@ -47,6 +62,18 @@ public class UpdateService
 
     public static async Task CheckForUpdatesAsync(AppConfig config, bool isManual)
     {
+        UpdateWindow? updateWindow = null;
+
+        await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+        {
+            if (isManual)
+            {
+                updateWindow = new UpdateWindow(ThemeService.IsDarkMode());
+                updateWindow.Show();
+                updateWindow.ShowChecking();
+            }
+        });
+
         try
         {
             var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{config.GitHubRepo}/releases/latest");
@@ -56,13 +83,12 @@ public class UpdateService
             var response = await HttpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                if (isManual)
+                if (isManual && updateWindow != null)
                 {
-                    WpfMessageBox.Show(
-                        $"检查更新失败 (HTTP {(int)response.StatusCode})\n请检查网络连接或稍后重试。",
-                        "检查更新 - Date",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                    await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        updateWindow.ShowError($"无法连接到服务器 (HTTP {(int)response.StatusCode})");
+                    });
                 }
                 return;
             }
@@ -72,13 +98,12 @@ public class UpdateService
 
             if (release == null || string.IsNullOrWhiteSpace(release.TagName))
             {
-                if (isManual)
+                if (isManual && updateWindow != null)
                 {
-                    WpfMessageBox.Show(
-                        $"当前已是最新版本 (v{CurrentVersion.ToString(3)})！\n暂无可用更新。",
-                        "检查更新 - Date",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                    });
                 }
                 return;
             }
@@ -86,57 +111,49 @@ public class UpdateService
             config.LastUpdateCheck = DateTime.Now;
             config.Save();
 
-            // 解析版本号（剥除前缀 'v' 或 'V'）
             string tag = release.TagName.TrimStart('v', 'V').Trim();
             if (Version.TryParse(tag, out var latestVersion))
             {
                 if (latestVersion > CurrentVersion)
                 {
-                    string notes = string.IsNullOrWhiteSpace(release.Body) ? "无更新说明" : release.Body.Trim();
-                    if (notes.Length > 200) notes = notes[..200] + "...";
+                    // 找到 zip 下载包
+                    string downloadUrl = release.Assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.BrowserDownloadUrl ?? string.Empty;
+                    string notes = string.IsNullOrWhiteSpace(release.Body) ? "暂无详细说明" : release.Body.Trim();
 
-                    var result = WpfMessageBox.Show(
-                        $"发现新版本: v{latestVersion} (当前版本: v{CurrentVersion.ToString(3)})\n\n更新说明:\n{notes}\n\n是否前往 GitHub 下载最新绿色版？",
-                        "发现新版本 - Date",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Information);
-
-                    if (result == MessageBoxResult.Yes && !string.IsNullOrWhiteSpace(release.HtmlUrl))
+                    await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        Process.Start(new ProcessStartInfo
+                        if (updateWindow == null)
                         {
-                            FileName = release.HtmlUrl,
-                            UseShellExecute = true
-                        });
-                    }
+                            updateWindow = new UpdateWindow(ThemeService.IsDarkMode());
+                            updateWindow.Show();
+                        }
+                        updateWindow.ShowUpdateAvailable(latestVersion.ToString(), CurrentVersion.ToString(3), notes, downloadUrl, release.HtmlUrl);
+                    });
                 }
-                else if (isManual)
+                else if (isManual && updateWindow != null)
                 {
-                    WpfMessageBox.Show(
-                        $"当前已是最新版本 (v{CurrentVersion.ToString(3)})！",
-                        "检查更新 - Date",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                    });
                 }
             }
-            else if (isManual)
+            else if (isManual && updateWindow != null)
             {
-                WpfMessageBox.Show(
-                    $"当前已是最新版本 (v{CurrentVersion.ToString(3)})！",
-                    "检查更新 - Date",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                });
             }
         }
         catch (Exception ex)
         {
-            if (isManual)
+            if (isManual && updateWindow != null)
             {
-                WpfMessageBox.Show(
-                    $"检查更新过程中发生异常：\n{ex.Message}",
-                    "检查更新 - Date",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    updateWindow.ShowError(ex.Message);
+                });
             }
         }
     }

@@ -84,7 +84,6 @@ public partial class MainWindow : Window
     protected override void OnStateChanged(EventArgs e)
     {
         base.OnStateChanged(e);
-        // 彻底禁止被系统最小化（防止 Win+D 触发隐藏）
         if (WindowState != WindowState.Normal)
         {
             WindowState = WindowState.Normal;
@@ -128,6 +127,7 @@ public partial class MainWindow : Window
 
         if (_isDarkMode)
         {
+            // 胶囊配色
             PillContainer.Background = DarkBg;
             PillContainer.BorderBrush = DarkBorder;
             TxtDate.Foreground = DarkDateFg;
@@ -137,9 +137,17 @@ public partial class MainWindow : Window
             TxtDayOfWeek.Foreground = DarkDayFg;
             PillShadow.Color = MediaColor.FromRgb(0x00, 0x00, 0x00);
             PillShadow.Opacity = 0.35;
+
+            // 右键菜单深色自适应
+            Resources["MenuBgBrush"] = new SolidColorBrush(MediaColor.FromArgb(0xEB, 0x1E, 0x1E, 0x22));
+            Resources["MenuBorderBrush"] = new SolidColorBrush(MediaColor.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
+            Resources["MenuItemFgBrush"] = new SolidColorBrush(MediaColor.FromRgb(0xFF, 0xFF, 0xFF));
+            Resources["MenuItemHoverBrush"] = new SolidColorBrush(MediaColor.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+            Resources["MenuSeparatorBrush"] = new SolidColorBrush(MediaColor.FromArgb(0x25, 0xFF, 0xFF, 0xFF));
         }
         else
         {
+            // 胶囊配色
             PillContainer.Background = LightBg;
             PillContainer.BorderBrush = LightBorder;
             TxtDate.Foreground = LightDateFg;
@@ -149,6 +157,13 @@ public partial class MainWindow : Window
             TxtDayOfWeek.Foreground = LightDayFg;
             PillShadow.Color = MediaColor.FromRgb(0x50, 0x50, 0x50);
             PillShadow.Opacity = 0.18;
+
+            // 右键菜单浅色自适应
+            Resources["MenuBgBrush"] = new SolidColorBrush(MediaColor.FromArgb(0xF2, 0xF6, 0xF6, 0xF9));
+            Resources["MenuBorderBrush"] = new SolidColorBrush(MediaColor.FromArgb(0x30, 0x00, 0x00, 0x00));
+            Resources["MenuItemFgBrush"] = new SolidColorBrush(MediaColor.FromRgb(0x11, 0x11, 0x13));
+            Resources["MenuItemHoverBrush"] = new SolidColorBrush(MediaColor.FromArgb(0x15, 0x00, 0x00, 0x00));
+            Resources["MenuSeparatorBrush"] = new SolidColorBrush(MediaColor.FromArgb(0x18, 0x00, 0x00, 0x00));
         }
     }
 
@@ -295,16 +310,6 @@ public partial class MainWindow : Window
         };
         exitItem.Click += (s, e) => App.ExitApp();
         _contextMenu.Items.Add(exitItem);
-
-        // 设置动态主题背景
-        if (_isDarkMode)
-        {
-            _contextMenu.Foreground = MediaBrushes.White;
-        }
-        else
-        {
-            _contextMenu.Foreground = new SolidColorBrush(MediaColor.FromRgb(0x11, 0x11, 0x13));
-        }
 
         _contextMenu.PlacementTarget = this;
         _contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;

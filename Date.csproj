@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.0.5</Version>
+    <Version>1.0.6</Version>
     <AssemblyTitle>Date</AssemblyTitle>
     <Description>基于 macOS 26 设计美学的 Windows 11 任务栏日期与星期显示小工具</Description>
     <Company>Crucialmer</Company>
