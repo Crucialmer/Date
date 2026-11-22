@@ -19,6 +19,9 @@ public class AppConfig
     // 是否启动时自动检查更新
     public bool CheckUpdatesOnStartup { get; set; } = true;
     
+    // 是否开机自启动
+    public bool AutoStart { get; set; } = false;
+    
     public DateTime? LastUpdateCheck { get; set; } = null;
     
     public string GitHubRepo { get; set; } = "Crucialmer/Date";

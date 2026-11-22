@@ -199,9 +199,9 @@ public partial class MainWindow : Window
                 else
                 {
                     PillContainer.Padding = new Thickness(13, 3, 13, 3);
-                    TxtDate.FontSize = 13;
-                    TxtDayOfWeek.FontSize = 12;
-                    Divider.Height = 12;
+                    TxtDate.FontSize = 13.5;
+                    TxtDayOfWeek.FontSize = 12.5;
+                    Divider.Height = 13;
                 }
 
                 if (Math.Abs(this.Left - pos.Value.X) > 0.5) this.Left = pos.Value.X;
@@ -267,6 +267,25 @@ public partial class MainWindow : Window
         _contextMenu.Items.Add(autoItem);
         _contextMenu.Items.Add(darkItem);
         _contextMenu.Items.Add(lightItem);
+        _contextMenu.Items.Add(new Separator { Style = separatorStyle });
+
+        // 开机自启动
+        var autoStartItem = new MenuItem
+        {
+            Header = "开机自启动",
+            IsChecked = AutoStartService.IsAutoStartEnabled(),
+            Style = itemStyle
+        };
+        autoStartItem.Click += (s, e) =>
+        {
+            bool next = !AutoStartService.IsAutoStartEnabled();
+            if (AutoStartService.SetAutoStart(next))
+            {
+                _config.AutoStart = next;
+                _config.Save();
+            }
+        };
+        _contextMenu.Items.Add(autoStartItem);
         _contextMenu.Items.Add(new Separator { Style = separatorStyle });
 
         // 检查更新

@@ -51,6 +51,12 @@ public partial class App : Application
         // 4. 初始化深浅色主题监听服务
         ThemeService.Initialize(_config.ThemeMode);
 
+        // 5. 同步开机自启动设置（若移动了程序目录自动纠正路径）
+        if (_config.AutoStart && !AutoStartService.IsAutoStartEnabled())
+        {
+            AutoStartService.SetAutoStart(true);
+        }
+
         // 5. 创建并呈现任务栏日期悬浮胶囊
         _mainWindow = new MainWindow(_config);
         _mainWindow.Show();
