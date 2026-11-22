@@ -141,12 +141,12 @@
                     Padding="6,1.5"
                     BorderThickness="1"
                     VerticalAlignment="Center">
-                <!-- 星期几 (12.5pt Medium) -->
+                <!-- 星期几 (与日期字号相同: 13.5pt SemiBold) -->
                 <TextBlock x:Name="TxtDayOfWeek"
                            Text="星期日"
                            FontFamily="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
-                           FontSize="12.5"
-                           FontWeight="Medium"
+                           FontSize="13.5"
+                           FontWeight="SemiBold"
                            VerticalAlignment="Center"/>
             </Border>
         </StackPanel>

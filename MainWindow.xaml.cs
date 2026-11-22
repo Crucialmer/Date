@@ -193,14 +193,14 @@ public partial class MainWindow : Window
                 {
                     PillContainer.Padding = new Thickness(10, 1.5, 10, 1.5);
                     TxtDate.FontSize = 11.5;
-                    TxtDayOfWeek.FontSize = 10.5;
+                    TxtDayOfWeek.FontSize = 11.5;
                     Divider.Height = 10;
                 }
                 else
                 {
                     PillContainer.Padding = new Thickness(13, 3, 13, 3);
                     TxtDate.FontSize = 13.5;
-                    TxtDayOfWeek.FontSize = 12.5;
+                    TxtDayOfWeek.FontSize = 13.5;
                     Divider.Height = 13;
                 }
 
