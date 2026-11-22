@@ -29,22 +29,22 @@ public partial class MainWindow : Window
     private bool _isDarkMode = true;
     private ContextMenu? _contextMenu;
 
-    // macOS 26 高对比度深色模式配色 (Obsidian Vibrancy Glass)
+    // macOS 26 高对比度深色模式配色 (Obsidian Vibrancy Glass - 极轻盈微透星期徽章)
     private static readonly SolidColorBrush DarkBg = new(MediaColor.FromArgb(0xD8, 0x1E, 0x1E, 0x22));
     private static readonly SolidColorBrush DarkBorder = new(MediaColor.FromArgb(0x45, 0xFF, 0xFF, 0xFF));
     private static readonly SolidColorBrush DarkDateFg = new(MediaColor.FromRgb(0xFF, 0xFF, 0xFF));
     private static readonly SolidColorBrush DarkDivider = new(MediaColor.FromArgb(0x38, 0xFF, 0xFF, 0xFF));
-    private static readonly SolidColorBrush DarkBadgeBg = new(MediaColor.FromArgb(0x35, 0xFF, 0xFF, 0xFF));
-    private static readonly SolidColorBrush DarkBadgeBorder = new(MediaColor.FromArgb(0x45, 0xFF, 0xFF, 0xFF));
+    private static readonly SolidColorBrush DarkBadgeBg = new(MediaColor.FromArgb(0x18, 0xFF, 0xFF, 0xFF));
+    private static readonly SolidColorBrush DarkBadgeBorder = new(MediaColor.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
     private static readonly SolidColorBrush DarkDayFg = new(MediaColor.FromRgb(0xF5, 0xF5, 0xF7));
 
-    // macOS 26 高对比度浅色模式配色 (Crystal Milk Vibrancy Glass)
+    // macOS 26 高对比度浅色模式配色 (Crystal Milk Vibrancy Glass - 极浅通透星期徽章)
     private static readonly SolidColorBrush LightBg = new(MediaColor.FromArgb(0xF0, 0xF6, 0xF6, 0xF9));
     private static readonly SolidColorBrush LightBorder = new(MediaColor.FromArgb(0x30, 0x00, 0x00, 0x00));
     private static readonly SolidColorBrush LightDateFg = new(MediaColor.FromRgb(0x11, 0x11, 0x13));
     private static readonly SolidColorBrush LightDivider = new(MediaColor.FromArgb(0x28, 0x00, 0x00, 0x00));
-    private static readonly SolidColorBrush LightBadgeBg = new(MediaColor.FromArgb(0x18, 0x00, 0x00, 0x00));
-    private static readonly SolidColorBrush LightBadgeBorder = new(MediaColor.FromArgb(0x20, 0x00, 0x00, 0x00));
+    private static readonly SolidColorBrush LightBadgeBg = new(MediaColor.FromArgb(0x09, 0x00, 0x00, 0x00));
+    private static readonly SolidColorBrush LightBadgeBorder = new(MediaColor.FromArgb(0x12, 0x00, 0x00, 0x00));
     private static readonly SolidColorBrush LightDayFg = new(MediaColor.FromRgb(0x2C, 0x2C, 0x2E));
 
     public MainWindow(AppConfig config)
@@ -136,7 +136,7 @@ public partial class MainWindow : Window
             DayBadge.BorderBrush = DarkBadgeBorder;
             TxtDayOfWeek.Foreground = DarkDayFg;
             PillShadow.Color = MediaColor.FromRgb(0x00, 0x00, 0x00);
-            PillShadow.Opacity = 0.35;
+            PillShadow.Opacity = 0.20;
 
             // 右键菜单深色自适应
             Resources["MenuBgBrush"] = new SolidColorBrush(MediaColor.FromArgb(0xEB, 0x1E, 0x1E, 0x22));
@@ -156,7 +156,7 @@ public partial class MainWindow : Window
             DayBadge.BorderBrush = LightBadgeBorder;
             TxtDayOfWeek.Foreground = LightDayFg;
             PillShadow.Color = MediaColor.FromRgb(0x50, 0x50, 0x50);
-            PillShadow.Opacity = 0.18;
+            PillShadow.Opacity = 0.10;
 
             // 右键菜单浅色自适应
             Resources["MenuBgBrush"] = new SolidColorBrush(MediaColor.FromArgb(0xF2, 0xF6, 0xF6, 0xF9));
