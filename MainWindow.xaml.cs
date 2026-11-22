@@ -192,9 +192,9 @@ public partial class MainWindow : Window
                 if (pos.Value.TaskbarHeight < 40)
                 {
                     PillContainer.Padding = new Thickness(10, 1.5, 10, 1.5);
-                    TxtDate.FontSize = 11.5;
-                    TxtDayOfWeek.FontSize = 11.5;
-                    Divider.Height = 10;
+                    TxtDate.FontSize = 12.0;
+                    TxtDayOfWeek.FontSize = 12.0;
+                    Divider.Height = 11;
                 }
                 else
                 {
