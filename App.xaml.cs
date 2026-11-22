@@ -20,6 +20,8 @@ public partial class App : Application
     private static ContextMenuStrip? _trayMenu;
     private static MainWindow? _mainWindow;
     private static AppConfig? _config;
+    private static int _currentTrayDay = 0;
+    private static System.Windows.Threading.DispatcherTimer? _dayCheckTimer;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -72,24 +74,22 @@ public partial class App : Application
             ContextMenuStrip = _trayMenu
         };
 
-        // 加载托盘图标（支持外部文件或内嵌资源，纯绿色便携）
-        string trayIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "tray.ico");
-        if (File.Exists(trayIconPath))
+        // 初始化动态随日期变化的 macOS 风格托盘图标
+        RefreshDynamicTrayIcon();
+
+        // 启动跨天检测定时器（每30秒检测一次，午夜00:00无缝切换）
+        _dayCheckTimer = new System.Windows.Threading.DispatcherTimer
         {
-            _trayIcon.Icon = new Icon(trayIconPath);
-        }
-        else
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _dayCheckTimer.Tick += (s, e) =>
         {
-            var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.tray.ico");
-            if (resStream != null)
+            if (DateTime.Now.Day != _currentTrayDay)
             {
-                _trayIcon.Icon = new Icon(resStream);
+                RefreshDynamicTrayIcon();
             }
-            else
-            {
-                _trayIcon.Icon = SystemIcons.Application;
-            }
-        }
+        };
+        _dayCheckTimer.Start();
 
         _trayIcon.MouseClick += (s, e) =>
         {
@@ -99,6 +99,35 @@ public partial class App : Application
                 ShowContextMenu();
             }
         };
+    }
+
+    private static void RefreshDynamicTrayIcon()
+    {
+        if (_trayIcon == null) return;
+        try
+        {
+            int day = DateTime.Now.Day;
+            _currentTrayDay = day;
+            var oldIcon = _trayIcon.Icon;
+            _trayIcon.Icon = TrayIconGenerator.GenerateCalendarIcon(day);
+            oldIcon?.Dispose();
+            _trayIcon.Text = $"Date - {DateTime.Now:yyyy年M月d日 dddd}";
+        }
+        catch
+        {
+            // 回退到静态图标
+            string trayIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "tray.ico");
+            if (File.Exists(trayIconPath))
+            {
+                _trayIcon.Icon = new Icon(trayIconPath);
+            }
+            else
+            {
+                var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.tray.ico");
+                if (resStream != null) _trayIcon.Icon = new Icon(resStream);
+                else _trayIcon.Icon = SystemIcons.Application;
+            }
+        }
     }
 
     private static void BuildTrayMenu()
@@ -187,9 +216,11 @@ public partial class App : Application
 
     private static void ExitApp()
     {
+        _dayCheckTimer?.Stop();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
+            _trayIcon.Icon?.Dispose();
             _trayIcon.Dispose();
         }
         _mutex?.ReleaseMutex();
@@ -198,9 +229,11 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _dayCheckTimer?.Stop();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
+            _trayIcon.Icon?.Dispose();
             _trayIcon.Dispose();
         }
         _mutex?.ReleaseMutex();
