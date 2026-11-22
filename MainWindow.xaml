@@ -12,6 +12,7 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType"
+        Opacity="0.0"
         SnapsToDevicePixels="True">
 
     <Window.Resources>

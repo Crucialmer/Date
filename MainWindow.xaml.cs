@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Media.Animation;
 using Date.Models;
 using Date.Services;
 using MediaColor = System.Windows.Media.Color;
@@ -100,7 +101,35 @@ public partial class MainWindow : Window
         UpdatePosition();
 
         _clockTimer.Start();
-        _positionTimer.Start();
+
+        // 核心优化：开机启动防跳动静默沉淀机制
+        // 若系统刚开机（开机未满 2 分钟，Environment.TickCount64 < 120,000），说明各种开机自启软件（杀软、声卡、网盘等）正在陆续抢占托盘
+        // 此阶段保持 Opacity=0 静默等待 3.8 秒，待所有托盘图标定型后一次性精确归位并丝滑淡入，彻底消灭开机反复跳动
+        bool isSystemBoot = Environment.TickCount64 < 120_000;
+        int delayMs = isSystemBoot ? 3800 : 350;
+
+        var startupTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(delayMs)
+        };
+        startupTimer.Tick += (s, ev) =>
+        {
+            startupTimer.Stop();
+
+            // 托盘图标全部就绪后，执行最终高精度归位
+            UpdatePosition();
+
+            // 丝滑淡入显现
+            var fadeIn = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(300))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            BeginAnimation(OpacityProperty, fadeIn);
+
+            // 启动日常定时位置校验
+            _positionTimer.Start();
+        };
+        startupTimer.Start();
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -204,8 +233,9 @@ public partial class MainWindow : Window
                     Divider.Height = 13;
                 }
 
-                if (Math.Abs(this.Left - pos.Value.X) > 0.5) this.Left = pos.Value.X;
-                if (Math.Abs(this.Top - pos.Value.Y) > 0.5) this.Top = pos.Value.Y;
+                // 防震荡微漂移阈值
+                if (Math.Abs(this.Left - pos.Value.X) > 1.0) this.Left = pos.Value.X;
+                if (Math.Abs(this.Top - pos.Value.Y) > 0.8) this.Top = pos.Value.Y;
             }
         }
         catch { }
