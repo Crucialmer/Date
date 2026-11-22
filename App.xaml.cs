@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
 using Date.Models;
@@ -20,46 +21,86 @@ public partial class App : Application
     private static ContextMenuStrip? _trayMenu;
     private static MainWindow? _mainWindow;
     private static AppConfig? _config;
-    private static int _currentTrayDay = 0;
-    private static System.Windows.Threading.DispatcherTimer? _dayCheckTimer;
 
-    protected override async void OnStartup(StartupEventArgs e)
+    protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        // 1. 单实例检查（纯绿色软件，避免多开重叠）
+        // 1. 全局异常兜底保护，杜绝任何未捕获异常导致的“闪退”
+        SetupGlobalExceptionHandling();
+
+        // 2. 单实例检查（纯绿色软件，避免多开重复悬浮）
         const string mutexName = "Date_App_SingleInstance_Mutex_Crucialmer";
-        _mutex = new Mutex(true, mutexName, out bool createdNew);
-        if (!createdNew)
+        try
         {
-            MessageBox.Show("Date 已经在运行中！可在屏幕右下角系统托盘找到它。", "提示 - Date", MessageBoxButton.OK, MessageBoxImage.Information);
-            Shutdown();
-            return;
+            _mutex = new Mutex(true, mutexName, out bool createdNew);
+            if (!createdNew)
+            {
+                MessageBox.Show("Date 已经在运行中！可在屏幕右下角系统托盘找到它。", "提示 - Date", MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+        }
+        catch (AbandonedMutexException)
+        {
+            // 上一个实例非正常退出留下的孤立互斥体，继续运行
         }
 
-        // 2. 加载本地便携配置
+        // 3. 加载本地便携配置
         _config = AppConfig.Load();
 
-        // 3. 初始化深浅色主题监听服务
+        // 4. 初始化深浅色主题监听服务
         ThemeService.Initialize(_config.ThemeMode);
 
-        // 4. 创建并呈现任务栏日期悬浮窗
+        // 5. 初始化系统托盘图标（与应用图标保持一致的高质感图标）
+        InitTrayIcon();
+
+        // 6. 创建并呈现任务栏日期悬浮胶囊
         _mainWindow = new MainWindow(_config);
         _mainWindow.Show();
 
-        // 5. 初始化系统托盘图标
-        InitTrayIcon();
-
-        // 6. 启动时自动检查更新（如果开启）
+        // 7. 启动时后台异步检查更新（静默不阻塞主线程）
         if (_config.CheckUpdatesOnStartup)
         {
             bool shouldCheck = !_config.LastUpdateCheck.HasValue ||
                                (DateTime.Now - _config.LastUpdateCheck.Value).TotalHours >= 24;
             if (shouldCheck)
             {
-                _ = UpdateService.CheckForUpdatesAsync(_config, isManual: false);
+                Task.Run(() => UpdateService.CheckForUpdatesAsync(_config, isManual: false));
             }
         }
+    }
+
+    private void SetupGlobalExceptionHandling()
+    {
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            LogLocalError("AppDomain", e.ExceptionObject as Exception);
+        };
+
+        DispatcherUnhandledException += (s, e) =>
+        {
+            LogLocalError("Dispatcher", e.Exception);
+            e.Handled = true; // 拦截异常，防止 WPF 崩溃退出
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            LogLocalError("TaskScheduler", e.Exception);
+            e.SetObserved();
+        };
+    }
+
+    private static void LogLocalError(string source, Exception? ex)
+    {
+        try
+        {
+            if (ex == null) return;
+            string logPath = Path.Combine(AppContext.BaseDirectory, "error.log");
+            string content = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{source}] {ex}\n\n";
+            File.AppendAllText(logPath, content);
+        }
+        catch { }
     }
 
     private void InitTrayIcon()
@@ -74,59 +115,45 @@ public partial class App : Application
             ContextMenuStrip = _trayMenu
         };
 
-        // 初始化动态随日期变化的 macOS 风格托盘图标
-        RefreshDynamicTrayIcon();
-
-        // 启动跨天检测定时器（每30秒检测一次，午夜00:00无缝切换）
-        _dayCheckTimer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(30)
-        };
-        _dayCheckTimer.Tick += (s, e) =>
-        {
-            if (DateTime.Now.Day != _currentTrayDay)
-            {
-                RefreshDynamicTrayIcon();
-            }
-        };
-        _dayCheckTimer.Start();
+        // 托盘图标与应用图标保持一致（高分辨率 macOS 风格日历图标）
+        LoadAppIconForTray();
 
         _trayIcon.MouseClick += (s, e) =>
         {
             if (e.Button == MouseButtons.Left)
             {
-                // 左键单击也可以唤起菜单
                 ShowContextMenu();
             }
         };
     }
 
-    private static void RefreshDynamicTrayIcon()
+    private static void LoadAppIconForTray()
     {
         if (_trayIcon == null) return;
         try
         {
-            int day = DateTime.Now.Day;
-            _currentTrayDay = day;
-            var oldIcon = _trayIcon.Icon;
-            _trayIcon.Icon = TrayIconGenerator.GenerateCalendarIcon(day);
-            oldIcon?.Dispose();
-            _trayIcon.Text = $"Date - {DateTime.Now:yyyy年M月d日 dddd}";
+            // 优先从外部 Assets/app.ico 加载
+            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+            if (File.Exists(iconPath))
+            {
+                _trayIcon.Icon = new Icon(iconPath);
+                return;
+            }
+
+            // 备用内嵌资源加载
+            var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.app.ico")
+                         ?? Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.tray.ico");
+            if (resStream != null)
+            {
+                _trayIcon.Icon = new Icon(resStream);
+                return;
+            }
+
+            _trayIcon.Icon = SystemIcons.Application;
         }
         catch
         {
-            // 回退到静态图标
-            string trayIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "tray.ico");
-            if (File.Exists(trayIconPath))
-            {
-                _trayIcon.Icon = new Icon(trayIconPath);
-            }
-            else
-            {
-                var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.tray.ico");
-                if (resStream != null) _trayIcon.Icon = new Icon(resStream);
-                else _trayIcon.Icon = SystemIcons.Application;
-            }
+            _trayIcon.Icon = SystemIcons.Application;
         }
     }
 
@@ -143,7 +170,7 @@ public partial class App : Application
         _trayMenu.Items.Add(titleItem);
         _trayMenu.Items.Add(new ToolStripSeparator());
 
-        // 主题菜单
+        // 主题外观
         var themeMenu = new ToolStripMenuItem("外观主题");
         var autoItem = new ToolStripMenuItem("跟随系统 (Auto)", null, (s, e) => SetTheme("Auto"))
         {
@@ -216,27 +243,25 @@ public partial class App : Application
 
     private static void ExitApp()
     {
-        _dayCheckTimer?.Stop();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
             _trayIcon.Icon?.Dispose();
             _trayIcon.Dispose();
         }
-        _mutex?.ReleaseMutex();
+        try { _mutex?.ReleaseMutex(); } catch { }
         Current.Shutdown();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _dayCheckTimer?.Stop();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
             _trayIcon.Icon?.Dispose();
             _trayIcon.Dispose();
         }
-        _mutex?.ReleaseMutex();
+        try { _mutex?.ReleaseMutex(); } catch { }
         base.OnExit(e);
     }
 }
