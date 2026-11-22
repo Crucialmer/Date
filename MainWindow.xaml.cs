@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -9,18 +11,26 @@ using System.Windows.Threading;
 using Date.Models;
 using Date.Services;
 using MediaColor = System.Windows.Media.Color;
+using MediaBrushes = System.Windows.Media.Brushes;
+using ContextMenu = System.Windows.Controls.ContextMenu;
+using MenuItem = System.Windows.Controls.MenuItem;
+using Separator = System.Windows.Controls.Separator;
 
 namespace Date;
 
 public partial class MainWindow : Window
 {
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private readonly AppConfig _config;
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _positionTimer;
     private bool _isDarkMode = true;
+    private ContextMenu? _contextMenu;
 
     // macOS 26 高对比度深色模式配色 (Obsidian Vibrancy Glass)
-    private static readonly SolidColorBrush DarkBg = new(MediaColor.FromArgb(0xD0, 0x1E, 0x1E, 0x22));
+    private static readonly SolidColorBrush DarkBg = new(MediaColor.FromArgb(0xD8, 0x1E, 0x1E, 0x22));
     private static readonly SolidColorBrush DarkBorder = new(MediaColor.FromArgb(0x45, 0xFF, 0xFF, 0xFF));
     private static readonly SolidColorBrush DarkDateFg = new(MediaColor.FromRgb(0xFF, 0xFF, 0xFF));
     private static readonly SolidColorBrush DarkDivider = new(MediaColor.FromArgb(0x38, 0xFF, 0xFF, 0xFF));
@@ -29,7 +39,7 @@ public partial class MainWindow : Window
     private static readonly SolidColorBrush DarkDayFg = new(MediaColor.FromRgb(0xF5, 0xF5, 0xF7));
 
     // macOS 26 高对比度浅色模式配色 (Crystal Milk Vibrancy Glass)
-    private static readonly SolidColorBrush LightBg = new(MediaColor.FromArgb(0xEA, 0xF6, 0xF6, 0xF9));
+    private static readonly SolidColorBrush LightBg = new(MediaColor.FromArgb(0xF0, 0xF6, 0xF6, 0xF9));
     private static readonly SolidColorBrush LightBorder = new(MediaColor.FromArgb(0x30, 0x00, 0x00, 0x00));
     private static readonly SolidColorBrush LightDateFg = new(MediaColor.FromRgb(0x11, 0x11, 0x13));
     private static readonly SolidColorBrush LightDivider = new(MediaColor.FromArgb(0x28, 0x00, 0x00, 0x00));
@@ -62,13 +72,22 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
 
-        // 核心修复：必须在 SourceInitialized 阶段（窗口呈现前）设置无激活与工具窗口样式
-        // 彻底解决之前在 Loaded 中改样式导致 Windows 11 DWM 判定异常引起的“闪退”问题
+        // 挂载至任务栏宿主、无激活工具窗口样式，彻底消灭闪退
         TaskbarLocator.ApplyWindowStyles(this);
 
         if (PresentationSource.FromVisual(this) is HwndSource source)
         {
             source.AddHook(WndProc);
+        }
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        // 彻底禁止被系统最小化（防止 Win+D 触发隐藏）
+        if (WindowState != WindowState.Normal)
+        {
+            WindowState = WindowState.Normal;
         }
     }
 
@@ -154,6 +173,22 @@ public partial class MainWindow : Window
             var pos = TaskbarLocator.CalculatePosition(this, _config.OffsetLeft);
             if (pos.HasValue)
             {
+                // 小任务栏适配：当任务栏高度小于 40DIP 时（常见 32px / 36px 小任务栏）
+                if (pos.Value.TaskbarHeight < 40)
+                {
+                    PillContainer.Padding = new Thickness(10, 1.5, 10, 1.5);
+                    TxtDate.FontSize = 11.5;
+                    TxtDayOfWeek.FontSize = 10.5;
+                    Divider.Height = 10;
+                }
+                else
+                {
+                    PillContainer.Padding = new Thickness(13, 3, 13, 3);
+                    TxtDate.FontSize = 13;
+                    TxtDayOfWeek.FontSize = 12;
+                    Divider.Height = 12;
+                }
+
                 if (Math.Abs(this.Left - pos.Value.X) > 0.5) this.Left = pos.Value.X;
                 if (Math.Abs(this.Top - pos.Value.Y) > 0.5) this.Top = pos.Value.Y;
             }
@@ -163,6 +198,123 @@ public partial class MainWindow : Window
 
     private void MainWindow_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        App.ShowContextMenu();
+        OpenMacContextMenu();
+    }
+
+    public void OpenMacContextMenu()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        SetForegroundWindow(hwnd);
+
+        _contextMenu = Resources["MacContextMenu"] as ContextMenu;
+        if (_contextMenu == null) return;
+
+        _contextMenu.Items.Clear();
+
+        var itemStyle = Resources["MacMenuItemStyle"] as Style;
+        var separatorStyle = Resources["MacSeparatorStyle"] as Style;
+
+        // 标题项
+        var titleItem = new MenuItem
+        {
+            Header = $"Date (v{UpdateService.CurrentVersion.ToString(3)})",
+            IsEnabled = false,
+            Style = itemStyle
+        };
+        _contextMenu.Items.Add(titleItem);
+        _contextMenu.Items.Add(new Separator { Style = separatorStyle });
+
+        // 外观选项
+        var autoItem = new MenuItem
+        {
+            Header = "跟随系统 (Auto)",
+            IsChecked = _config.ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase),
+            Style = itemStyle
+        };
+        autoItem.Click += (s, e) => SetTheme("Auto");
+
+        var darkItem = new MenuItem
+        {
+            Header = "深色模式 (Dark)",
+            IsChecked = _config.ThemeMode.Equals("Dark", StringComparison.OrdinalIgnoreCase),
+            Style = itemStyle
+        };
+        darkItem.Click += (s, e) => SetTheme("Dark");
+
+        var lightItem = new MenuItem
+        {
+            Header = "浅色模式 (Light)",
+            IsChecked = _config.ThemeMode.Equals("Light", StringComparison.OrdinalIgnoreCase),
+            Style = itemStyle
+        };
+        lightItem.Click += (s, e) => SetTheme("Light");
+
+        _contextMenu.Items.Add(autoItem);
+        _contextMenu.Items.Add(darkItem);
+        _contextMenu.Items.Add(lightItem);
+        _contextMenu.Items.Add(new Separator { Style = separatorStyle });
+
+        // 检查更新
+        var updateItem = new MenuItem
+        {
+            Header = "检查更新...",
+            Style = itemStyle
+        };
+        updateItem.Click += async (s, e) =>
+        {
+            await UpdateService.CheckForUpdatesAsync(_config, isManual: true);
+        };
+        _contextMenu.Items.Add(updateItem);
+
+        // 打开程序目录
+        var folderItem = new MenuItem
+        {
+            Header = "打开程序目录",
+            Style = itemStyle
+        };
+        folderItem.Click += (s, e) =>
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = AppContext.BaseDirectory,
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        };
+        _contextMenu.Items.Add(folderItem);
+        _contextMenu.Items.Add(new Separator { Style = separatorStyle });
+
+        // 退出
+        var exitItem = new MenuItem
+        {
+            Header = "退出",
+            Style = itemStyle
+        };
+        exitItem.Click += (s, e) => App.ExitApp();
+        _contextMenu.Items.Add(exitItem);
+
+        // 设置动态主题背景
+        if (_isDarkMode)
+        {
+            _contextMenu.Foreground = MediaBrushes.White;
+        }
+        else
+        {
+            _contextMenu.Foreground = new SolidColorBrush(MediaColor.FromRgb(0x11, 0x11, 0x13));
+        }
+
+        _contextMenu.PlacementTarget = this;
+        _contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        _contextMenu.IsOpen = true;
+    }
+
+    private void SetTheme(string mode)
+    {
+        _config.ThemeMode = mode;
+        _config.Save();
+        ThemeService.SetMode(mode);
     }
 }

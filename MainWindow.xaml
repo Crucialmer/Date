@@ -2,7 +2,6 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Date"
-        Height="34"
         SizeToContent="WidthAndHeight"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -15,26 +14,106 @@
         TextOptions.TextRenderingMode="ClearType"
         SnapsToDevicePixels="True">
 
-    <!-- macOS 26 极简微曲面毛玻璃悬浮胶囊（精致小圆角） -->
+    <Window.Resources>
+        <!-- macOS 26 极简毛玻璃菜单项样式 -->
+        <Style x:Key="MacMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="4,1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="ItemBorder" 
+                                CornerRadius="7" 
+                                Background="Transparent" 
+                                Padding="{TemplateBinding Padding}" 
+                                Margin="{TemplateBinding Margin}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IconGroup"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="IconHost" Grid.Column="0" ContentSource="Icon" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="CheckMark" Grid.Column="2" Text="✓" FontWeight="Bold" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#30FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- macOS 26 晶体分割线 -->
+        <Style x:Key="MacSeparatorStyle" TargetType="Separator">
+            <Setter Property="Margin" Value="6,4"/>
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Background="#25FFFFFF"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- macOS 26 毛玻璃右键上下文菜单 -->
+        <ContextMenu x:Key="MacContextMenu" 
+                     StaysOpen="False"
+                     HasDropShadow="True">
+            <ContextMenu.Template>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border x:Name="MenuContainer"
+                            CornerRadius="12"
+                            Background="#EB1E1E22"
+                            BorderBrush="#40FFFFFF"
+                            BorderThickness="1"
+                            Padding="3"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="16" Direction="270" ShadowDepth="3" Opacity="0.35" Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel IsItemsHost="True"/>
+                    </Border>
+                </ControlTemplate>
+            </ContextMenu.Template>
+        </ContextMenu>
+    </Window.Resources>
+
+    <!-- macOS 26 极简微曲面毛玻璃悬浮胶囊（对称阴影，圆角=12） -->
     <Border x:Name="PillContainer"
-            CornerRadius="8"
-            Margin="2,2"
-            Padding="13,4"
+            CornerRadius="12"
+            Padding="13,3"
             BorderThickness="1"
-            MinHeight="30"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Left"
             SnapsToDevicePixels="True">
         
+        <!-- 对称柔和光晕，保证上下居中不偏移 -->
         <Border.Effect>
             <DropShadowEffect x:Name="PillShadow" 
-                              BlurRadius="10" 
-                              Direction="270" 
-                              ShadowDepth="1" 
+                              BlurRadius="8" 
+                              Direction="0" 
+                              ShadowDepth="0" 
                               Opacity="0.25" 
                               Color="#000000"/>
         </Border.Effect>
 
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <!-- 日期 (大半个字号: 13pt，高对比度清晰排版) -->
+            <!-- 日期 (13pt SemiBold，极高对比度) -->
             <TextBlock x:Name="TxtDate"
                        Text="2026年11月22日"
                        FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
@@ -49,13 +128,13 @@
                     Margin="9,0"
                     VerticalAlignment="Center"/>
 
-            <!-- 星期几微型亚克力徽章（精巧圆角: 5） -->
+            <!-- 星期几微型亚克力徽章（圆角: 6） -->
             <Border x:Name="DayBadge"
-                    CornerRadius="5"
-                    Padding="6,2"
+                    CornerRadius="6"
+                    Padding="6,1.5"
                     BorderThickness="1"
                     VerticalAlignment="Center">
-                <!-- 星期几 (大半个字号: 12pt) -->
+                <!-- 星期几 (12pt Medium) -->
                 <TextBlock x:Name="TxtDayOfWeek"
                            Text="星期日"
                            FontFamily="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"

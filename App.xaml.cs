@@ -18,7 +18,6 @@ public partial class App : Application
 {
     private static Mutex? _mutex;
     private static NotifyIcon? _trayIcon;
-    private static ContextMenuStrip? _trayMenu;
     private static MainWindow? _mainWindow;
     private static AppConfig? _config;
 
@@ -52,12 +51,12 @@ public partial class App : Application
         // 4. 初始化深浅色主题监听服务
         ThemeService.Initialize(_config.ThemeMode);
 
-        // 5. 初始化系统托盘图标（与应用图标保持一致的高质感图标）
-        InitTrayIcon();
-
-        // 6. 创建并呈现任务栏日期悬浮胶囊
+        // 5. 创建并呈现任务栏日期悬浮胶囊
         _mainWindow = new MainWindow(_config);
         _mainWindow.Show();
+
+        // 6. 初始化系统托盘图标
+        InitTrayIcon();
 
         // 7. 启动时后台异步检查更新（静默不阻塞主线程）
         if (_config.CheckUpdatesOnStartup)
@@ -105,25 +104,19 @@ public partial class App : Application
 
     private void InitTrayIcon()
     {
-        _trayMenu = new ContextMenuStrip();
-        BuildTrayMenu();
-
         _trayIcon = new NotifyIcon
         {
             Text = "Date - 任务栏日期与星期",
-            Visible = true,
-            ContextMenuStrip = _trayMenu
+            Visible = true
         };
 
-        // 托盘图标与应用图标保持一致（高分辨率 macOS 风格日历图标）
+        // 托盘图标加载纯净透明的高质感日历图标
         LoadAppIconForTray();
 
         _trayIcon.MouseClick += (s, e) =>
         {
-            if (e.Button == MouseButtons.Left)
-            {
-                ShowContextMenu();
-            }
+            // 无论是左键还是右键点击托盘，均唤起统一的 macOS 26 毛玻璃风格菜单
+            _mainWindow?.Dispatcher.Invoke(() => _mainWindow.OpenMacContextMenu());
         };
     }
 
@@ -132,7 +125,6 @@ public partial class App : Application
         if (_trayIcon == null) return;
         try
         {
-            // 优先从外部 Assets/app.ico 加载
             string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
             if (File.Exists(iconPath))
             {
@@ -140,7 +132,6 @@ public partial class App : Application
                 return;
             }
 
-            // 备用内嵌资源加载
             var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.app.ico")
                          ?? Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.tray.ico");
             if (resStream != null)
@@ -157,91 +148,7 @@ public partial class App : Application
         }
     }
 
-    private static void BuildTrayMenu()
-    {
-        if (_trayMenu == null || _config == null) return;
-        _trayMenu.Items.Clear();
-
-        // 标题项
-        var titleItem = new ToolStripMenuItem($"Date (v{UpdateService.CurrentVersion.ToString(3)})")
-        {
-            Enabled = false
-        };
-        _trayMenu.Items.Add(titleItem);
-        _trayMenu.Items.Add(new ToolStripSeparator());
-
-        // 主题外观
-        var themeMenu = new ToolStripMenuItem("外观主题");
-        var autoItem = new ToolStripMenuItem("跟随系统 (Auto)", null, (s, e) => SetTheme("Auto"))
-        {
-            Checked = _config.ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase)
-        };
-        var darkItem = new ToolStripMenuItem("深色模式 (Dark)", null, (s, e) => SetTheme("Dark"))
-        {
-            Checked = _config.ThemeMode.Equals("Dark", StringComparison.OrdinalIgnoreCase)
-        };
-        var lightItem = new ToolStripMenuItem("浅色模式 (Light)", null, (s, e) => SetTheme("Light"))
-        {
-            Checked = _config.ThemeMode.Equals("Light", StringComparison.OrdinalIgnoreCase)
-        };
-        themeMenu.DropDownItems.AddRange(new ToolStripItem[] { autoItem, darkItem, lightItem });
-        _trayMenu.Items.Add(themeMenu);
-
-        // 检查更新
-        var updateItem = new ToolStripMenuItem("检查更新...", null, async (s, e) =>
-        {
-            if (_config != null)
-            {
-                await UpdateService.CheckForUpdatesAsync(_config, isManual: true);
-            }
-        });
-        _trayMenu.Items.Add(updateItem);
-
-        // 打开程序目录
-        var openFolderItem = new ToolStripMenuItem("打开程序目录", null, (s, e) =>
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = AppContext.BaseDirectory,
-                    UseShellExecute = true
-                });
-            }
-            catch { }
-        });
-        _trayMenu.Items.Add(openFolderItem);
-
-        _trayMenu.Items.Add(new ToolStripSeparator());
-
-        // 退出
-        var exitItem = new ToolStripMenuItem("退出", null, (s, e) =>
-        {
-            ExitApp();
-        });
-        _trayMenu.Items.Add(exitItem);
-    }
-
-    private static void SetTheme(string mode)
-    {
-        if (_config == null) return;
-        _config.ThemeMode = mode;
-        _config.Save();
-        ThemeService.SetMode(mode);
-        BuildTrayMenu();
-    }
-
-    public static void ShowContextMenu()
-    {
-        if (_trayMenu != null)
-        {
-            BuildTrayMenu();
-            var pt = Control.MousePosition;
-            _trayMenu.Show(pt.X, pt.Y);
-        }
-    }
-
-    private static void ExitApp()
+    public static void ExitApp()
     {
         if (_trayIcon != null)
         {
