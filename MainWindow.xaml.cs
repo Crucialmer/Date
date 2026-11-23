@@ -161,9 +161,11 @@ public partial class MainWindow : Window
             PillContainer.BorderBrush = DarkBorder;
             TxtDate.Foreground = DarkDateFg;
             Divider.Background = DarkDivider;
+            Divider2.Background = DarkDivider;
             DayBadge.Background = DarkBadgeBg;
             DayBadge.BorderBrush = DarkBadgeBorder;
             TxtDayOfWeek.Foreground = DarkDayFg;
+            TxtTime.Foreground = DarkDateFg;
             PillShadow.Color = MediaColor.FromRgb(0x00, 0x00, 0x00);
             PillShadow.Opacity = 0.20;
 
@@ -181,9 +183,11 @@ public partial class MainWindow : Window
             PillContainer.BorderBrush = LightBorder;
             TxtDate.Foreground = LightDateFg;
             Divider.Background = LightDivider;
+            Divider2.Background = LightDivider;
             DayBadge.Background = LightBadgeBg;
             DayBadge.BorderBrush = LightBadgeBorder;
             TxtDayOfWeek.Foreground = LightDayFg;
+            TxtTime.Foreground = LightDateFg;
             PillShadow.Color = MediaColor.FromRgb(0x50, 0x50, 0x50);
             PillShadow.Opacity = 0.10;
 
@@ -203,9 +207,22 @@ public partial class MainWindow : Window
             DateTime now = DateTime.Now;
             string dateText = now.ToString(_config.DateFormat);
             string dayText = now.ToString(_config.DayOfWeekFormat);
+            string timeText = now.ToString(_config.TimeFormat);
 
             if (TxtDate.Text != dateText) TxtDate.Text = dateText;
             if (TxtDayOfWeek.Text != dayText) TxtDayOfWeek.Text = dayText;
+
+            if (_config.ShowTime)
+            {
+                if (Divider2.Visibility != Visibility.Visible) Divider2.Visibility = Visibility.Visible;
+                if (TxtTime.Visibility != Visibility.Visible) TxtTime.Visibility = Visibility.Visible;
+                if (TxtTime.Text != timeText) TxtTime.Text = timeText;
+            }
+            else
+            {
+                if (Divider2.Visibility != Visibility.Collapsed) Divider2.Visibility = Visibility.Collapsed;
+                if (TxtTime.Visibility != Visibility.Collapsed) TxtTime.Visibility = Visibility.Collapsed;
+            }
         }
         catch { }
     }
@@ -223,14 +240,18 @@ public partial class MainWindow : Window
                     PillContainer.Padding = new Thickness(10, 1.5, 10, 1.5);
                     TxtDate.FontSize = 12.0;
                     TxtDayOfWeek.FontSize = 12.0;
+                    TxtTime.FontSize = 12.0;
                     Divider.Height = 11;
+                    Divider2.Height = 11;
                 }
                 else
                 {
                     PillContainer.Padding = new Thickness(13, 3, 13, 3);
                     TxtDate.FontSize = 13.5;
                     TxtDayOfWeek.FontSize = 13.5;
+                    TxtTime.FontSize = 13.5;
                     Divider.Height = 13;
+                    Divider2.Height = 13;
                 }
 
                 // 防震荡微漂移阈值
@@ -316,6 +337,24 @@ public partial class MainWindow : Window
             }
         };
         _contextMenu.Items.Add(autoStartItem);
+        _contextMenu.Items.Add(new Separator { Style = separatorStyle });
+
+        // 显示实时时间
+        var showTimeItem = new MenuItem
+        {
+            Header = "显示实时时间 (时:分)",
+            IsChecked = _config.ShowTime,
+            Style = itemStyle
+        };
+        showTimeItem.Click += (s, e) =>
+        {
+            _config.ShowTime = !_config.ShowTime;
+            _config.Save();
+            UpdateDateTimeText();
+            UpdateLayout();
+            UpdatePosition();
+        };
+        _contextMenu.Items.Add(showTimeItem);
         _contextMenu.Items.Add(new Separator { Style = separatorStyle });
 
         // 检查更新

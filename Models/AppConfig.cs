@@ -10,6 +10,10 @@ public class AppConfig
     public string DateFormat { get; set; } = "yyyy年M月d日";
     public string DayOfWeekFormat { get; set; } = "dddd";
     
+    // 是否在星期几右侧显示实时时间 (HH:mm)
+    public bool ShowTime { get; set; } = true;
+    public string TimeFormat { get; set; } = "HH:mm";
+    
     // "Auto", "Dark", "Light"
     public string ThemeMode { get; set; } = "Auto";
     
