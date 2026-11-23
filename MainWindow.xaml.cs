@@ -359,6 +359,20 @@ public partial class MainWindow : Window
         };
         _contextMenu.Items.Add(updateItem);
 
+        // 启动时自动检查更新
+        var autoUpdateItem = new MenuItem
+        {
+            Header = "启动时自动检查更新",
+            IsChecked = _config.CheckUpdatesOnStartup,
+            Style = itemStyle
+        };
+        autoUpdateItem.Click += (s, e) =>
+        {
+            _config.CheckUpdatesOnStartup = !_config.CheckUpdatesOnStartup;
+            _config.Save();
+        };
+        _contextMenu.Items.Add(autoUpdateItem);
+
         // 打开程序目录
         var folderItem = new MenuItem
         {

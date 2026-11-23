@@ -64,15 +64,15 @@ public partial class App : Application
         // 6. 初始化系统托盘图标
         InitTrayIcon();
 
-        // 7. 启动时后台异步检查更新（静默不阻塞主线程）
+        // 7. 每次打开软件时后台自动异步检查更新（静默检测，发现新版本立即在右下角弹出提示）
         if (_config.CheckUpdatesOnStartup)
         {
-            bool shouldCheck = !_config.LastUpdateCheck.HasValue ||
-                               (DateTime.Now - _config.LastUpdateCheck.Value).TotalHours >= 24;
-            if (shouldCheck)
+            Task.Run(async () =>
             {
-                Task.Run(() => UpdateService.CheckForUpdatesAsync(_config, isManual: false));
-            }
+                // 等待 2.5 秒确保网络连接就绪，避免与系统刚启动时的网络初始化冲突
+                await Task.Delay(2500);
+                await UpdateService.CheckForUpdatesAsync(_config, isManual: false);
+            });
         }
     }
 
