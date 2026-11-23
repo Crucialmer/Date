@@ -121,49 +121,37 @@
         </Border.Effect>
 
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <!-- 日期 (13.5pt SemiBold，极高对比度) -->
+            <!-- 日期 (14.0pt SemiBold，极高对比度) -->
             <TextBlock x:Name="TxtDate"
                        Text="2026年11月22日"
                        FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
-                       FontSize="13.5"
+                       FontSize="14"
                        FontWeight="SemiBold"
                        VerticalAlignment="Center"/>
 
-            <!-- 垂直晶体微发光细线 -->
-            <Border x:Name="Divider"
-                    Width="1"
-                    Height="13"
-                    Margin="9,0"
-                    VerticalAlignment="Center"/>
-
-            <!-- 星期几微型亚克力徽章（圆角: 6） -->
+            <!-- 星期几微型亚克力徽章（圆角: 6，左右留白呼吸感，无竖线） -->
             <Border x:Name="DayBadge"
                     CornerRadius="6"
-                    Padding="6,1.5"
+                    Padding="7,1.5"
+                    Margin="9,0,0,0"
                     BorderThickness="1"
                     VerticalAlignment="Center">
-                <!-- 星期几 (与日期字号相同: 13.5pt SemiBold) -->
+                <!-- 星期几 (与日期字号相同: 14.0pt SemiBold) -->
                 <TextBlock x:Name="TxtDayOfWeek"
                            Text="星期日"
                            FontFamily="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
-                           FontSize="13.5"
+                           FontSize="14"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"/>
             </Border>
 
-            <!-- 垂直晶体微发光细线 2 -->
-            <Border x:Name="Divider2"
-                    Width="1"
-                    Height="13"
-                    Margin="9,0"
-                    VerticalAlignment="Center"/>
-
-            <!-- 实时时间 时:分 (13.5pt SemiBold，等宽数字排版防抖动) -->
+            <!-- 实时时间 时:分 (14.0pt SemiBold，等宽数字排版防抖动) -->
             <TextBlock x:Name="TxtTime"
                        Text="18:59"
                        FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
-                       FontSize="13.5"
+                       FontSize="14"
                        FontWeight="SemiBold"
+                       Margin="9,0,0,0"
                        Typography.NumeralAlignment="Tabular"
                        VerticalAlignment="Center"/>
         </StackPanel>

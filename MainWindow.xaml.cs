@@ -160,8 +160,6 @@ public partial class MainWindow : Window
             PillContainer.Background = DarkBg;
             PillContainer.BorderBrush = DarkBorder;
             TxtDate.Foreground = DarkDateFg;
-            Divider.Background = DarkDivider;
-            Divider2.Background = DarkDivider;
             DayBadge.Background = DarkBadgeBg;
             DayBadge.BorderBrush = DarkBadgeBorder;
             TxtDayOfWeek.Foreground = DarkDayFg;
@@ -182,8 +180,6 @@ public partial class MainWindow : Window
             PillContainer.Background = LightBg;
             PillContainer.BorderBrush = LightBorder;
             TxtDate.Foreground = LightDateFg;
-            Divider.Background = LightDivider;
-            Divider2.Background = LightDivider;
             DayBadge.Background = LightBadgeBg;
             DayBadge.BorderBrush = LightBadgeBorder;
             TxtDayOfWeek.Foreground = LightDayFg;
@@ -214,13 +210,11 @@ public partial class MainWindow : Window
 
             if (_config.ShowTime)
             {
-                if (Divider2.Visibility != Visibility.Visible) Divider2.Visibility = Visibility.Visible;
                 if (TxtTime.Visibility != Visibility.Visible) TxtTime.Visibility = Visibility.Visible;
                 if (TxtTime.Text != timeText) TxtTime.Text = timeText;
             }
             else
             {
-                if (Divider2.Visibility != Visibility.Collapsed) Divider2.Visibility = Visibility.Collapsed;
                 if (TxtTime.Visibility != Visibility.Collapsed) TxtTime.Visibility = Visibility.Collapsed;
             }
         }
@@ -238,20 +232,16 @@ public partial class MainWindow : Window
                 if (pos.Value.TaskbarHeight < 40)
                 {
                     PillContainer.Padding = new Thickness(10, 1.5, 10, 1.5);
-                    TxtDate.FontSize = 12.0;
-                    TxtDayOfWeek.FontSize = 12.0;
-                    TxtTime.FontSize = 12.0;
-                    Divider.Height = 11;
-                    Divider2.Height = 11;
+                    TxtDate.FontSize = 12.5;
+                    TxtDayOfWeek.FontSize = 12.5;
+                    TxtTime.FontSize = 12.5;
                 }
                 else
                 {
                     PillContainer.Padding = new Thickness(13, 3, 13, 3);
-                    TxtDate.FontSize = 13.5;
-                    TxtDayOfWeek.FontSize = 13.5;
-                    TxtTime.FontSize = 13.5;
-                    Divider.Height = 13;
-                    Divider2.Height = 13;
+                    TxtDate.FontSize = 14.0;
+                    TxtDayOfWeek.FontSize = 14.0;
+                    TxtTime.FontSize = 14.0;
                 }
 
                 // 防震荡微漂移阈值
