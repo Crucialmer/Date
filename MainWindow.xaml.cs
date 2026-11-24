@@ -59,7 +59,14 @@ public partial class MainWindow : Window
         {
             Interval = TimeSpan.FromSeconds(1)
         };
-        _clockTimer.Tick += (s, e) => UpdateDateTimeText();
+        _clockTimer.Tick += (s, e) =>
+        {
+            UpdateDateTimeText();
+            if (!_isStartingUp && !_isClosing)
+            {
+                TaskbarLocator.EnsureVisibleAndTopmost(this);
+            }
+        };
 
         _positionTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -187,6 +194,8 @@ public partial class MainWindow : Window
         }
     }
 
+    private static readonly int WM_TASKBARCREATED = TaskbarLocator.RegisterWindowMessage("TaskbarCreated");
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_DISPLAYCHANGE = 0x007E;
@@ -197,38 +206,75 @@ public partial class MainWindow : Window
         const int WM_SYSCOMMAND = 0x0112;
         const int SC_MINIMIZE = 0xF020;
 
-        // 1. 阻止系统或桌面切换尝试隐藏胶囊窗口（如 Win+D 显示桌面、窗口失焦隐藏等）
+        // 1. 任务栏重启广播通知（重新挂载宿主并更新位置）
+        if (WM_TASKBARCREATED != 0 && msg == WM_TASKBARCREATED)
+        {
+            TaskbarLocator.ApplyWindowStyles(this);
+            TaskbarLocator.ResetCache();
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(UpdatePosition));
+        }
+
+        // 2. 阻止系统或桌面切换尝试隐藏胶囊窗口（如 Win+D 显示桌面、窗口失焦隐藏等）
         if (msg == WM_SHOWWINDOW)
         {
             if (wParam == IntPtr.Zero && !_isClosing)
             {
                 handled = true;
+                // 立即反向强制设回显示与最高层置顶，粉碎任何隐藏尝试
+                Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
+                {
+                    if (!_isClosing)
+                    {
+                        TaskbarLocator.EnsureVisibleAndTopmost(this);
+                    }
+                }));
                 return IntPtr.Zero;
             }
         }
 
-        // 2. 拦截并阻止窗口最小化系统命令
+        // 3. 拦截并阻止窗口最小化系统命令
         if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
         {
             handled = true;
             return IntPtr.Zero;
         }
 
-        // 3. 拦截窗口位置及 Z 序变动：强制维持 HWND_TOPMOST 置顶，防止任务栏重绘时压入底层
+        // 4. 拦截窗口位置及 Z 序变动：
+        // a) 剥离 SWP_HIDEWINDOW 并追加 SWP_SHOWWINDOW，彻底防御 Win+D / 点击右下角“显示桌面”
+        // b) 拦截 -32000 最小化坐标偏移
+        // c) 强制维持 HWND_TOPMOST 最高置顶，防止任务栏重绘时压入底层
         if (msg == WM_WINDOWPOSCHANGING && lParam != IntPtr.Zero)
         {
             try
             {
                 var wp = Marshal.PtrToStructure<TaskbarLocator.WINDOWPOS>(lParam);
+
+                if (!_isClosing)
+                {
+                    // 剥离 SWP_HIDEWINDOW 并追加 SWP_SHOWWINDOW
+                    if ((wp.flags & TaskbarLocator.SWP_HIDEWINDOW) != 0)
+                    {
+                        wp.flags &= ~TaskbarLocator.SWP_HIDEWINDOW;
+                        wp.flags |= TaskbarLocator.SWP_SHOWWINDOW;
+                    }
+
+                    // 拦截最小化坐标偏移
+                    if (wp.x <= -30000 || wp.y <= -30000)
+                    {
+                        wp.flags |= TaskbarLocator.SWP_NOMOVE | TaskbarLocator.SWP_NOSIZE;
+                    }
+                }
+
                 wp.hwndInsertAfter = TaskbarLocator.HWND_TOPMOST;
                 wp.flags |= TaskbarLocator.SWP_NOACTIVATE;
                 wp.flags &= ~TaskbarLocator.SWP_NOZORDER;
+
                 Marshal.StructureToPtr(wp, lParam, false);
             }
             catch { }
         }
 
-        // 4. 显示设置、DWM 合成重置时重测位置与重置缓存
+        // 5. 显示设置、DWM 合成重置时重测位置与重置缓存
         if (msg == WM_DISPLAYCHANGE || msg == WM_SETTINGCHANGE || msg == WM_DWMCOMPOSITIONCHANGED)
         {
             if (msg == WM_DISPLAYCHANGE)
@@ -237,7 +283,7 @@ public partial class MainWindow : Window
             }
             Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
             {
-                TaskbarLocator.EnsureTopmost(this);
+                TaskbarLocator.EnsureVisibleAndTopmost(this);
                 UpdatePosition();
             }));
         }
@@ -349,8 +395,8 @@ public partial class MainWindow : Window
                 if (Math.Abs(this.Top - pos.Value.Y) > 0.8) this.Top = pos.Value.Y;
             }
 
-            // 核心加固：周期性确保置顶，防止任务栏重绘或托盘图标变动后将胶囊压入底层
-            TaskbarLocator.EnsureTopmost(this);
+            // 核心加固：周期性确保可见与置顶，防止任务栏重绘或托盘图标变动后将胶囊压入底层
+            TaskbarLocator.EnsureVisibleAndTopmost(this);
 
             // 确保启动沉淀结束后不透明度始终为 1.0
             if (!_isStartingUp && this.Opacity < 1.0)

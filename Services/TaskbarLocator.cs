@@ -10,6 +10,7 @@ public class TaskbarLocator
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_NOACTIVATE = 0x08000000;
     public const int GWL_EXSTYLE = -20;
+    public const int GWL_HWNDPARENT = -8;
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
     public const uint SWP_NOSIZE = 0x0001;
@@ -17,12 +18,26 @@ public class TaskbarLocator
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_SHOWWINDOW = 0x0040;
+    public const uint SWP_HIDEWINDOW = 0x0080;
+
+    public const int SW_SHOWNOACTIVATE = 4;
+    public const int SW_SHOW = 5;
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern int RegisterWindowMessage(string lpString);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
@@ -79,7 +94,7 @@ public class TaskbarLocator
     }
 
     /// <summary>
-    /// 在 OnSourceInitialized 阶段应用无激活工具窗口样式并锁定最高层置顶
+    /// 在 OnSourceInitialized 阶段应用无激活工具窗口样式、挂载任务栏宿主以豁免“显示桌面”，并锁定最高层置顶
     /// </summary>
     public static void ApplyWindowStyles(Window window)
     {
@@ -87,28 +102,50 @@ public class TaskbarLocator
         if (hwnd == IntPtr.Zero) return;
 
         // 1. 设置免激活与无独立任务栏图标样式 (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)
-        // 彻底根除跨进程设置 Owner (Shell_TrayWnd) 导致的 DWM 树图层混淆、连锁隐藏及闪烁缺陷！
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
 
-        // 2. 锁定置顶于最高层
-        EnsureTopmost(window);
+        // 2. 将任务栏 Shell_TrayWnd 设为 Win32 宿主 (GWL_HWNDPARENT)
+        // 关键核心：Windows Explorer 的“显示桌面 (ToggleDesktop / Win+D)”在枚举要最小化的窗口时，
+        // 会检查宿主窗口。如果宿主是 Shell_TrayWnd，资源管理器会将其视为任务栏不可分割的一部分，直接予以豁免，永不最小化！
+        // 注意：切勿使用 WPF 的 new WindowInteropHelper(window).Owner = taskbar（会触发跨进程托管树绑定异常），
+        // 仅在 Win32 纯句柄层设置 GWL_HWNDPARENT 即可完美生效！
+        IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
+        if (taskbar != IntPtr.Zero)
+        {
+            if (IntPtr.Size == 8)
+                SetWindowLongPtr(hwnd, GWL_HWNDPARENT, taskbar);
+            else
+                SetWindowLong(hwnd, GWL_HWNDPARENT, taskbar.ToInt32());
+        }
+
+        // 3. 锁定置顶于最高层
+        EnsureVisibleAndTopmost(window);
     }
 
     /// <summary>
-    /// 强制确保胶囊窗口位于 TOPMOST 顶层
+    /// 强制确保胶囊窗口可见并位于 TOPMOST 顶层（彻底抵御任何非预期隐藏与压制）
     /// </summary>
-    public static void EnsureTopmost(Window window)
+    public static void EnsureVisibleAndTopmost(Window window)
     {
         try
         {
             var hwnd = new WindowInteropHelper(window).Handle;
             if (hwnd != IntPtr.Zero)
             {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// 兼容调用：强制确保胶囊窗口位于 TOPMOST 顶层
+    /// </summary>
+    public static void EnsureTopmost(Window window)
+    {
+        EnsureVisibleAndTopmost(window);
     }
 
     /// <summary>
