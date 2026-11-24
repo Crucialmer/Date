@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _positionTimer;
     private bool _isDarkMode = true;
     private ContextMenu? _contextMenu;
+    private bool _isClosing = false;
+    private bool _isStartingUp = true;
 
     // macOS 26 高对比度深色模式配色 (Obsidian Vibrancy Glass - 极轻盈微透星期徽章)
     private static readonly SolidColorBrush DarkBg = new(MediaColor.FromArgb(0xD8, 0x1E, 0x1E, 0x22));
@@ -91,10 +93,32 @@ public partial class MainWindow : Window
         }
     }
 
+    public void PrepareClose()
+    {
+        _isClosing = true;
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        _isClosing = true;
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        Microsoft.Win32.SystemEvents.SessionSwitch -= SystemEvents_SessionSwitch;
+        Microsoft.Win32.SystemEvents.PowerModeChanged -= SystemEvents_PowerModeChanged;
+        ThemeService.ThemeChanged -= OnThemeChanged;
+        base.OnClosed(e);
+    }
+
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         ThemeService.ThemeChanged += OnThemeChanged;
         ApplyTheme(ThemeService.IsDarkMode());
+
+        Microsoft.Win32.SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
+        Microsoft.Win32.SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
 
         UpdateDateTimeText();
         UpdateLayout();
@@ -115,14 +139,21 @@ public partial class MainWindow : Window
         startupTimer.Tick += (s, ev) =>
         {
             startupTimer.Stop();
+            _isStartingUp = false;
 
-            // 托盘图标全部就绪后，执行最终高精度归位
+            // 托盘图标全部就绪后，执行最终高精度归位与最高层置顶
             UpdatePosition();
 
             // 丝滑淡入显现
             var fadeIn = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(300))
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (snd, ea) =>
+            {
+                // 动画结束清理时钟并显式固定 Opacity = 1.0，彻底消除属性持有时钟导致的不透明度异常
+                BeginAnimation(OpacityProperty, null);
+                Opacity = 1.0;
             };
             BeginAnimation(OpacityProperty, fadeIn);
 
@@ -132,14 +163,83 @@ public partial class MainWindow : Window
         startupTimer.Start();
     }
 
+    private void SystemEvents_SessionSwitch(object sender, Microsoft.Win32.SessionSwitchEventArgs e)
+    {
+        if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                TaskbarLocator.EnsureTopmost(this);
+                UpdatePosition();
+            }));
+        }
+    }
+
+    private void SystemEvents_PowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == Microsoft.Win32.PowerModes.Resume)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                TaskbarLocator.EnsureTopmost(this);
+                UpdatePosition();
+            }));
+        }
+    }
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_DISPLAYCHANGE = 0x007E;
         const int WM_SETTINGCHANGE = 0x001A;
+        const int WM_DWMCOMPOSITIONCHANGED = 0x031E;
+        const int WM_SHOWWINDOW = 0x0018;
+        const int WM_WINDOWPOSCHANGING = 0x0046;
+        const int WM_SYSCOMMAND = 0x0112;
+        const int SC_MINIMIZE = 0xF020;
 
-        if (msg == WM_DISPLAYCHANGE || msg == WM_SETTINGCHANGE)
+        // 1. 阻止系统或桌面切换尝试隐藏胶囊窗口（如 Win+D 显示桌面、窗口失焦隐藏等）
+        if (msg == WM_SHOWWINDOW)
         {
-            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(UpdatePosition));
+            if (wParam == IntPtr.Zero && !_isClosing)
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+        }
+
+        // 2. 拦截并阻止窗口最小化系统命令
+        if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
+        {
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        // 3. 拦截窗口位置及 Z 序变动：强制维持 HWND_TOPMOST 置顶，防止任务栏重绘时压入底层
+        if (msg == WM_WINDOWPOSCHANGING && lParam != IntPtr.Zero)
+        {
+            try
+            {
+                var wp = Marshal.PtrToStructure<TaskbarLocator.WINDOWPOS>(lParam);
+                wp.hwndInsertAfter = TaskbarLocator.HWND_TOPMOST;
+                wp.flags |= TaskbarLocator.SWP_NOACTIVATE;
+                wp.flags &= ~TaskbarLocator.SWP_NOZORDER;
+                Marshal.StructureToPtr(wp, lParam, false);
+            }
+            catch { }
+        }
+
+        // 4. 显示设置、DWM 合成重置时重测位置与重置缓存
+        if (msg == WM_DISPLAYCHANGE || msg == WM_SETTINGCHANGE || msg == WM_DWMCOMPOSITIONCHANGED)
+        {
+            if (msg == WM_DISPLAYCHANGE)
+            {
+                TaskbarLocator.ResetCache();
+            }
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                TaskbarLocator.EnsureTopmost(this);
+                UpdatePosition();
+            }));
         }
 
         return IntPtr.Zero;
@@ -247,6 +347,15 @@ public partial class MainWindow : Window
                 // 防震荡微漂移阈值
                 if (Math.Abs(this.Left - pos.Value.X) > 1.0) this.Left = pos.Value.X;
                 if (Math.Abs(this.Top - pos.Value.Y) > 0.8) this.Top = pos.Value.Y;
+            }
+
+            // 核心加固：周期性确保置顶，防止任务栏重绘或托盘图标变动后将胶囊压入底层
+            TaskbarLocator.EnsureTopmost(this);
+
+            // 确保启动沉淀结束后不透明度始终为 1.0
+            if (!_isStartingUp && this.Opacity < 1.0)
+            {
+                this.Opacity = 1.0;
             }
         }
         catch { }

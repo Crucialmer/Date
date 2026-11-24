@@ -156,6 +156,7 @@ public partial class App : Application
 
     public static void ExitApp()
     {
+        _mainWindow?.PrepareClose();
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;
