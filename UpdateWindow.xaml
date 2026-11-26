@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Date 检查更新"
-        Width="350"
+        Width="368"
         SizeToContent="Height"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -13,22 +13,36 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType"
+        RenderOptions.BitmapScalingMode="HighQuality"
+        Opacity="0.0"
         SnapsToDevicePixels="True">
 
     <Window.Resources>
-        <!-- 进度条样式 (macOS 极简胶囊进度条) -->
+        <!-- 动态主题笔刷 (深色为默认，随系统/设置实时同步) -->
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF0A84FF"/>
+        <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF2997FF"/>
+        <SolidColorBrush x:Key="AccentPressedBrush" Color="#FF006AE0"/>
+        <SolidColorBrush x:Key="AccentPillBgBrush" Color="#260A84FF"/>
+        <SolidColorBrush x:Key="SecondaryFgBrush" Color="#99EBEBF5"/>
+        <SolidColorBrush x:Key="CloseHoverBrush" Color="#24FFFFFF"/>
+        <SolidColorBrush x:Key="SecondaryBtnBgBrush" Color="#1AFFFFFF"/>
+        <SolidColorBrush x:Key="SecondaryBtnHoverBrush" Color="#28FFFFFF"/>
+        <SolidColorBrush x:Key="ProgressTrackBrush" Color="#22FFFFFF"/>
+        <SolidColorBrush x:Key="ScrollThumbBrush" Color="#44FFFFFF"/>
+
+        <!-- macOS 26 极简胶囊进度条 -->
         <Style x:Key="MacProgressBarStyle" TargetType="ProgressBar">
             <Setter Property="Height" Value="6"/>
-            <Setter Property="Background" Value="#25808080"/>
-            <Setter Property="Foreground" Value="#007AFF"/>
+            <Setter Property="Background" Value="{DynamicResource ProgressTrackBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ProgressBar">
                         <Border CornerRadius="3" Background="{TemplateBinding Background}" ClipToBounds="True">
                             <Grid x:Name="PART_Track">
-                                <Border x:Name="PART_Indicator" 
-                                        CornerRadius="3" 
-                                        Background="{TemplateBinding Foreground}" 
+                                <Border x:Name="PART_Indicator"
+                                        CornerRadius="3"
+                                        Background="{TemplateBinding Foreground}"
                                         HorizontalAlignment="Left"/>
                             </Grid>
                         </Border>
@@ -36,171 +50,259 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- macOS 26 极细悬浮滚动条 -->
+        <Style x:Key="MacThinScrollBarThumb" TargetType="Thumb">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border CornerRadius="2.5"
+                                Background="{DynamicResource ScrollThumbBrush}"
+                                Margin="1,0"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MacThinScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource MacThinScrollBarThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
-    <!-- macOS 26 极简毛玻璃卡片容器 (右下角弹出) -->
+    <!-- macOS 26 Liquid Glass 右下角通知卡片（圆角=20，各向异性高光边框 + 液态折射柔光） -->
     <Border x:Name="CardContainer"
-            CornerRadius="16"
-            Margin="10"
-            Padding="16,14"
+            CornerRadius="20"
+            Margin="14"
             BorderThickness="1"
             SnapsToDevicePixels="True">
-        
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="CardTranslate" Y="12"/>
+        </Border.RenderTransform>
+
         <Border.Effect>
             <DropShadowEffect x:Name="CardShadow"
-                              BlurRadius="20"
+                              BlurRadius="24"
                               Direction="270"
-                              ShadowDepth="4"
-                              Opacity="0.32"
+                              ShadowDepth="6"
+                              Opacity="0.40"
                               Color="#000000"/>
         </Border.Effect>
 
-        <StackPanel>
-            <!-- 顶栏：应用徽标、标题、关闭按钮 -->
-            <Grid Margin="0,0,0,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <Grid>
+            <!-- 顶部液态玻璃折射微光层 -->
+            <Border x:Name="CardSheen"
+                    CornerRadius="19,19,10,10"
+                    VerticalAlignment="Top"
+                    Height="36"
+                    Margin="0.5,0.5,0.5,0"
+                    IsHitTestVisible="False"/>
 
-                <!-- 拟物日历微型图标 -->
-                <Image x:Name="AppLogo" Width="22" Height="22" Margin="0,0,8,0" VerticalAlignment="Center"/>
+            <StackPanel Margin="18,16">
+                <!-- 顶栏：应用徽标、标题、关闭按钮 -->
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- 标题 -->
-                <TextBlock x:Name="TxtTitle"
-                           Grid.Column="1"
-                           Text="Date 软件更新"
-                           FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
-                           FontSize="13.5"
-                           FontWeight="SemiBold"
+                    <!-- Liquid Glass 拟物日历图标 -->
+                    <Image x:Name="AppLogo"
+                           Width="24"
+                           Height="24"
+                           Margin="0,0,10,0"
                            VerticalAlignment="Center"/>
 
-                <!-- 关闭按钮 (小圆叉) -->
-                <Button x:Name="BtnClose"
-                        Grid.Column="2"
-                        Width="20"
-                        Height="20"
-                        Cursor="Hand"
-                        Click="BtnClose_Click"
-                        VerticalAlignment="Center">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="CircleBorder" CornerRadius="10" Background="Transparent">
-                                <TextBlock Text="✕" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" x:Name="CloseTxt"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="CircleBorder" Property="Background" Value="#25808080"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </Grid>
+                    <!-- 标题 -->
+                    <TextBlock x:Name="TxtTitle"
+                               Grid.Column="1"
+                               Text="Date 软件更新"
+                               FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
 
-            <!-- 状态 1: 正在检查中 / 提示信息 -->
-            <StackPanel x:Name="PanelChecking" Visibility="Visible" Margin="0,4,0,8">
-                <TextBlock x:Name="TxtStatus"
-                           Text="正在连接 GitHub 检查更新..."
-                           FontFamily="Segoe UI Variable Text, -apple-system, PingFang SC"
-                           FontSize="12"
-                           TextWrapping="Wrap"
-                           Opacity="0.85"/>
-            </StackPanel>
+                    <!-- 关闭按钮 (深浅色自适应高对比小圆叉) -->
+                    <Button x:Name="BtnClose"
+                            Grid.Column="2"
+                            Width="22"
+                            Height="22"
+                            Cursor="Hand"
+                            Click="BtnClose_Click"
+                            VerticalAlignment="Center">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="CircleBorder" CornerRadius="11" Background="Transparent">
+                                    <TextBlock Text="✕"
+                                               FontSize="10.5"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SecondaryFgBrush}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="CircleBorder" Property="Background" Value="{DynamicResource CloseHoverBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
 
-            <!-- 状态 2: 发现新版本详情面板 -->
-            <StackPanel x:Name="PanelUpdateDetails" Visibility="Collapsed" Margin="0,0,0,8">
-                <!-- 版本对比胶囊 -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <Border CornerRadius="6" Background="#20007AFF" Padding="6,2">
-                        <TextBlock x:Name="TxtNewVersion" Text="新版本: v1.0.6" Foreground="#007AFF" FontSize="11" FontWeight="SemiBold"/>
-                    </Border>
-                    <TextBlock x:Name="TxtCurrentVersion" Text="当前: v1.0.5" FontSize="11" Opacity="0.55" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                <!-- 状态 1: 正在检查中 / 提示信息 -->
+                <StackPanel x:Name="PanelChecking" Visibility="Visible" Margin="0,2,0,4">
+                    <TextBlock x:Name="TxtStatus"
+                               Text="正在连接 GitHub 检查最新版本..."
+                               FontFamily="Segoe UI Variable Text, -apple-system, PingFang SC, Microsoft YaHei UI"
+                               FontSize="12.5"
+                               LineHeight="18"
+                               TextWrapping="Wrap"
+                               Opacity="0.9"/>
                 </StackPanel>
 
-                <!-- 更新说明卡片 (带滚动) -->
-                <Border x:Name="NotesContainer"
-                        CornerRadius="8"
-                        Padding="10,8"
-                        MaxHeight="120"
-                        Margin="0,0,0,10">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <TextBlock x:Name="TxtReleaseNotes"
-                                   Text="更新内容说明..."
+                <!-- 状态 2: 发现新版本详情面板 -->
+                <StackPanel x:Name="PanelUpdateDetails" Visibility="Collapsed" Margin="0,0,0,12">
+                    <!-- 版本对比胶囊 -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Border CornerRadius="8" Background="{DynamicResource AccentPillBgBrush}" Padding="8,2.5">
+                            <TextBlock x:Name="TxtNewVersion"
+                                       Text="新版本 v1.0.17"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       FontSize="11.5"
+                                       FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock x:Name="TxtCurrentVersion"
+                                   Text="当前 v1.0.16"
+                                   Foreground="{DynamicResource SecondaryFgBrush}"
                                    FontSize="11.5"
-                                   LineHeight="16"
-                                   TextWrapping="Wrap"/>
-                    </ScrollViewer>
-                </Border>
-            </StackPanel>
+                                   Margin="9,0,0,0"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
 
-            <!-- 状态 3: 下载进度面板 -->
-            <StackPanel x:Name="PanelProgress" Visibility="Collapsed" Margin="0,2,0,10">
-                <Grid Margin="0,0,0,6">
-                    <TextBlock x:Name="TxtProgressDesc" Text="正在下载更新包..." FontSize="11.5" Opacity="0.85"/>
-                    <TextBlock x:Name="TxtPercent" Text="0%" FontSize="11.5" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                    <!-- 更新说明卡片 (带 macOS 极细滚动条) -->
+                    <Border x:Name="NotesContainer"
+                            CornerRadius="12"
+                            BorderThickness="1"
+                            Padding="11,9"
+                            MaxHeight="132">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer.Resources>
+                                <Style TargetType="ScrollBar" BasedOn="{StaticResource MacThinScrollBar}"/>
+                            </ScrollViewer.Resources>
+                            <TextBlock x:Name="TxtReleaseNotes"
+                                       Text="更新内容说明..."
+                                       FontFamily="Segoe UI Variable Text, -apple-system, PingFang SC, Microsoft YaHei UI"
+                                       FontSize="12"
+                                       LineHeight="17.5"
+                                       TextWrapping="Wrap"/>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+
+                <!-- 状态 3: 下载进度面板 -->
+                <StackPanel x:Name="PanelProgress" Visibility="Collapsed" Margin="0,2,0,10">
+                    <Grid Margin="0,0,0,7">
+                        <TextBlock x:Name="TxtProgressDesc"
+                                   Text="正在下载更新包..."
+                                   FontSize="12"
+                                   Opacity="0.88"/>
+                        <TextBlock x:Name="TxtPercent"
+                                   Text="0%"
+                                   FontSize="12"
+                                   Typography.NumeralAlignment="Tabular"
+                                   HorizontalAlignment="Right"
+                                   FontWeight="SemiBold"/>
+                    </Grid>
+                    <ProgressBar x:Name="ProgressBarUpdate"
+                                 Style="{StaticResource MacProgressBarStyle}"
+                                 Value="0"
+                                 Maximum="100"/>
+                </StackPanel>
+
+                <!-- 底部操作按钮区域 (macOS 26 胶囊按钮) -->
+                <Grid x:Name="PanelButtons">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 次要按钮 (稍后再说) -->
+                    <Button x:Name="BtnCancel"
+                            Grid.Column="1"
+                            Content="稍后再说"
+                            Padding="14,6"
+                            Margin="0,0,8,0"
+                            FontSize="12"
+                            FontWeight="Medium"
+                            Cursor="Hand"
+                            Click="BtnCancel_Click"
+                            Visibility="Collapsed">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="btnBorder"
+                                        CornerRadius="12"
+                                        Background="{DynamicResource SecondaryBtnBgBrush}"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="btnBorder" Property="Background" Value="{DynamicResource SecondaryBtnHoverBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- 主要操作按钮 (立即更新 / 打开网页下载) -->
+                    <Button x:Name="BtnAction"
+                            Grid.Column="2"
+                            Content="立即更新"
+                            Padding="16,6"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="#FFFFFF"
+                            Cursor="Hand"
+                            Click="BtnAction_Click"
+                            Visibility="Collapsed">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="btnBorder"
+                                        CornerRadius="12"
+                                        Background="{DynamicResource AccentBrush}"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="btnBorder" Property="Background" Value="{DynamicResource AccentHoverBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="btnBorder" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
                 </Grid>
-                <ProgressBar x:Name="ProgressBarUpdate" Style="{StaticResource MacProgressBarStyle}" Value="0" Maximum="100"/>
             </StackPanel>
-
-            <!-- 底部操作按钮区域 -->
-            <Grid x:Name="PanelButtons">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- 次要按钮 (稍后再说) -->
-                <Button x:Name="BtnCancel"
-                        Grid.Column="1"
-                        Content="稍后再说"
-                        Padding="12,5"
-                        Margin="0,0,8,0"
-                        FontSize="11.5"
-                        Cursor="Hand"
-                        Click="BtnCancel_Click"
-                        Visibility="Collapsed">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="btnBorder" CornerRadius="8" Background="#18808080" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="btnBorder" Property="Background" Value="#25808080"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-
-                <!-- 主要操作按钮 (立即更新 / 确定) -->
-                <Button x:Name="BtnAction"
-                        Grid.Column="2"
-                        Content="立即更新"
-                        Padding="14,5"
-                        FontSize="11.5"
-                        FontWeight="SemiBold"
-                        Foreground="#FFFFFF"
-                        Cursor="Hand"
-                        Click="BtnAction_Click"
-                        Visibility="Collapsed">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="btnBorder" CornerRadius="8" Background="#007AFF" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="btnBorder" Property="Background" Value="#0062D2"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </Grid>
-        </StackPanel>
+        </Grid>
     </Border>
 </Window>

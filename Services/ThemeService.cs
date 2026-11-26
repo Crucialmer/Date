@@ -3,25 +3,47 @@ using Microsoft.Win32;
 
 namespace Date.Services;
 
-public class ThemeService
+public static class ThemeService
 {
     public static event Action<bool>? ThemeChanged; // bool isDarkMode
 
     private static string _currentMode = "Auto";
+    private static bool _isInitialized;
+    private static bool _lastNotifiedDarkMode;
 
     public static void Initialize(string mode)
     {
         _currentMode = mode;
-        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        _lastNotifiedDarkMode = IsDarkMode();
+
+        if (!_isInitialized)
+        {
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            _isInitialized = true;
+        }
+    }
+
+    public static void Shutdown()
+    {
+        if (_isInitialized)
+        {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            _isInitialized = false;
+        }
     }
 
     private static void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
-        if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Window)
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Window)
         {
             if (_currentMode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
             {
-                ThemeChanged?.Invoke(IsSystemDarkMode());
+                bool isDark = IsSystemDarkMode();
+                if (isDark != _lastNotifiedDarkMode)
+                {
+                    _lastNotifiedDarkMode = isDark;
+                    ThemeChanged?.Invoke(isDark);
+                }
             }
         }
     }
@@ -29,7 +51,9 @@ public class ThemeService
     public static void SetMode(string mode)
     {
         _currentMode = mode;
-        ThemeChanged?.Invoke(IsDarkMode());
+        bool isDark = IsDarkMode();
+        _lastNotifiedDarkMode = isDark;
+        ThemeChanged?.Invoke(isDark);
     }
 
     public static bool IsDarkMode()
@@ -47,14 +71,9 @@ public class ThemeService
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            if (key != null)
+            if (key?.GetValue("SystemUsesLightTheme") is int val)
             {
-                // Windows 11 任务栏通常跟随 SystemUsesLightTheme
-                object? systemUsesLight = key.GetValue("SystemUsesLightTheme");
-                if (systemUsesLight is int val)
-                {
-                    return val == 0;
-                }
+                return val == 0;
             }
         }
         catch

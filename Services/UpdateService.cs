@@ -1,25 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using Date.Models;
 using WpfApplication = System.Windows.Application;
 
 namespace Date.Services;
 
-public class UpdateService
+public static class UpdateService
 {
-    private static readonly HttpClient HttpClient = new()
+    internal static readonly HttpClient SharedHttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(15)
     };
+
+    private static int _isChecking;
+    private static UpdateWindow? _activeWindow;
 
     public class ReleaseAsset
     {
@@ -56,38 +57,63 @@ public class UpdateService
         get
         {
             var ver = Assembly.GetExecutingAssembly().GetName().Version;
-            return ver != null ? new Version(ver.Major, ver.Minor, ver.Build >= 0 ? ver.Build : 0) : new Version(1, 0, 0);
+            return ver != null
+                ? new Version(ver.Major, ver.Minor, Math.Max(0, ver.Build))
+                : new Version(1, 0, 0);
         }
     }
 
+    private static Version NormalizeVersion(Version v) =>
+        new(v.Major, v.Minor, Math.Max(0, v.Build));
+
     public static async Task CheckForUpdatesAsync(AppConfig config, bool isManual)
     {
-        UpdateWindow? updateWindow = null;
-
-        await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+        // 若已有更新卡片正在展示且是手动触发，直接激活已有窗口避免重复弹窗
+        if (Interlocked.CompareExchange(ref _isChecking, 1, 0) != 0)
         {
             if (isManual)
             {
-                updateWindow = new UpdateWindow(ThemeService.IsDarkMode());
-                updateWindow.Show();
-                updateWindow.ShowChecking();
+                await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    if (_activeWindow is { IsVisible: true })
+                    {
+                        _activeWindow.Activate();
+                    }
+                });
             }
-        });
+            return;
+        }
+
+        UpdateWindow? updateWindow = null;
 
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{config.GitHubRepo}/releases/latest");
-            request.Headers.Add("User-Agent", $"Date-App/{CurrentVersion}");
+            await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
+            {
+                if (isManual)
+                {
+                    updateWindow = GetOrCreateUpdateWindow();
+                    updateWindow.ShowChecking();
+                }
+            });
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"https://api.github.com/repos/{config.GitHubRepo}/releases/latest");
+            request.Headers.Add("User-Agent", $"Date-App/{CurrentVersion.ToString(3)}");
             request.Headers.Add("Accept", "application/vnd.github.v3+json");
 
-            var response = await HttpClient.SendAsync(request);
+            using var response = await SharedHttpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
                 if (isManual && updateWindow != null)
                 {
                     await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        updateWindow.ShowError($"无法连接到服务器 (HTTP {(int)response.StatusCode})");
+                        if (updateWindow.IsLoaded)
+                        {
+                            updateWindow.ShowError($"无法连接到服务器 (HTTP {(int)response.StatusCode})");
+                        }
                     });
                 }
                 return;
@@ -102,7 +128,10 @@ public class UpdateService
                 {
                     await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                        if (updateWindow.IsLoaded)
+                        {
+                            updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                        }
                     });
                 }
                 return;
@@ -112,29 +141,37 @@ public class UpdateService
             config.Save();
 
             string tag = release.TagName.TrimStart('v', 'V').Trim();
-            if (Version.TryParse(tag, out var latestVersion))
+            if (Version.TryParse(tag, out var parsedVersion))
             {
+                var latestVersion = NormalizeVersion(parsedVersion);
                 if (latestVersion > CurrentVersion)
                 {
-                    // 找到 zip 下载包
-                    string downloadUrl = release.Assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.BrowserDownloadUrl ?? string.Empty;
-                    string notes = string.IsNullOrWhiteSpace(release.Body) ? "暂无详细说明" : release.Body.Trim();
+                    string downloadUrl = release.Assets
+                        .FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        ?.BrowserDownloadUrl ?? string.Empty;
+                    string notes = string.IsNullOrWhiteSpace(release.Body)
+                        ? "暂无详细更新说明"
+                        : release.Body.Trim();
 
                     await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        if (updateWindow == null)
-                        {
-                            updateWindow = new UpdateWindow(ThemeService.IsDarkMode());
-                            updateWindow.Show();
-                        }
-                        updateWindow.ShowUpdateAvailable(latestVersion.ToString(), CurrentVersion.ToString(3), notes, downloadUrl, release.HtmlUrl);
+                        updateWindow ??= GetOrCreateUpdateWindow();
+                        updateWindow.ShowUpdateAvailable(
+                            latestVersion.ToString(3),
+                            CurrentVersion.ToString(3),
+                            notes,
+                            downloadUrl,
+                            release.HtmlUrl);
                     });
                 }
                 else if (isManual && updateWindow != null)
                 {
                     await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                        if (updateWindow.IsLoaded)
+                        {
+                            updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                        }
                     });
                 }
             }
@@ -142,7 +179,10 @@ public class UpdateService
             {
                 await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                    if (updateWindow.IsLoaded)
+                    {
+                        updateWindow.ShowUpToDate(CurrentVersion.ToString(3));
+                    }
                 });
             }
         }
@@ -152,9 +192,37 @@ public class UpdateService
             {
                 await WpfApplication.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    updateWindow.ShowError(ex.Message);
+                    if (updateWindow.IsLoaded)
+                    {
+                        updateWindow.ShowError(ex.Message);
+                    }
                 });
             }
         }
+        finally
+        {
+            Interlocked.Exchange(ref _isChecking, 0);
+        }
+    }
+
+    private static UpdateWindow GetOrCreateUpdateWindow()
+    {
+        if (_activeWindow is { IsVisible: true })
+        {
+            _activeWindow.Activate();
+            return _activeWindow;
+        }
+
+        var window = new UpdateWindow(ThemeService.IsDarkMode());
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_activeWindow, window))
+            {
+                _activeWindow = null;
+            }
+        };
+        _activeWindow = window;
+        window.Show();
+        return window;
     }
 }

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
@@ -20,6 +19,7 @@ public partial class App : Application
     private static NotifyIcon? _trayIcon;
     private static MainWindow? _mainWindow;
     private static AppConfig? _config;
+    private static volatile bool _isExiting;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -35,6 +35,8 @@ public partial class App : Application
             _mutex = new Mutex(true, mutexName, out bool createdNew);
             if (!createdNew)
             {
+                _mutex.Dispose();
+                _mutex = null;
                 MessageBox.Show("Date 已经在运行中！可在屏幕右下角系统托盘找到它。", "提示 - Date", MessageBoxButton.OK, MessageBoxImage.Information);
                 Shutdown();
                 return;
@@ -57,39 +59,42 @@ public partial class App : Application
             AutoStartService.SetAutoStart(true);
         }
 
-        // 5. 创建并呈现任务栏日期悬浮胶囊
+        // 6. 创建并呈现任务栏日期悬浮胶囊
         _mainWindow = new MainWindow(_config);
         _mainWindow.Show();
 
-        // 6. 初始化系统托盘图标
+        // 7. 初始化系统托盘图标
         InitTrayIcon();
 
-        // 7. 每次打开软件时后台自动异步检查更新（静默检测，发现新版本立即在右下角弹出提示）
+        // 8. 每次打开软件时后台自动异步检查更新（静默检测，发现新版本立即在右下角弹出提示）
         if (_config.CheckUpdatesOnStartup)
         {
-            Task.Run(async () =>
+            var cfg = _config;
+            _ = Task.Run(async () =>
             {
-                // 等待 2.5 秒确保网络连接就绪，避免与系统刚启动时的网络初始化冲突
                 await Task.Delay(2500);
-                await UpdateService.CheckForUpdatesAsync(_config, isManual: false);
+                if (!_isExiting)
+                {
+                    await UpdateService.CheckForUpdatesAsync(cfg, isManual: false);
+                }
             });
         }
     }
 
     private void SetupGlobalExceptionHandling()
     {
-        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             LogLocalError("AppDomain", e.ExceptionObject as Exception);
         };
 
-        DispatcherUnhandledException += (s, e) =>
+        DispatcherUnhandledException += (_, e) =>
         {
             LogLocalError("Dispatcher", e.Exception);
-            e.Handled = true; // 拦截异常，防止 WPF 崩溃退出
+            e.Handled = true;
         };
 
-        TaskScheduler.UnobservedTaskException += (s, e) =>
+        TaskScheduler.UnobservedTaskException += (_, e) =>
         {
             LogLocalError("TaskScheduler", e.Exception);
             e.SetObserved();
@@ -112,17 +117,22 @@ public partial class App : Application
     {
         _trayIcon = new NotifyIcon
         {
-            Text = "Date - 任务栏日期与星期",
+            Text = $"Date v{UpdateService.CurrentVersion.ToString(3)} - 任务栏日期与星期",
             Visible = true
         };
 
-        // 托盘图标加载纯净透明的高质感日历图标
         LoadAppIconForTray();
 
-        _trayIcon.MouseClick += (s, e) =>
+        _trayIcon.MouseClick += (_, _) =>
         {
-            // 无论是左键还是右键点击托盘，均唤起统一的 macOS 26 毛玻璃风格菜单
-            _mainWindow?.Dispatcher.Invoke(() => _mainWindow.OpenMacContextMenu());
+            if (_isExiting) return;
+            _mainWindow?.Dispatcher.BeginInvoke(() =>
+            {
+                if (!_isExiting)
+                {
+                    _mainWindow.OpenMacContextMenu();
+                }
+            });
         };
     }
 
@@ -131,6 +141,7 @@ public partial class App : Application
         if (_trayIcon == null) return;
         try
         {
+            // 优先支持用户目录自定义覆盖，否则直接读取单文件内嵌高质感图标
             string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
             if (File.Exists(iconPath))
             {
@@ -138,8 +149,7 @@ public partial class App : Application
                 return;
             }
 
-            var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.app.ico")
-                         ?? Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.tray.ico");
+            using var resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Date.Assets.app.ico");
             if (resStream != null)
             {
                 _trayIcon.Icon = new Icon(resStream);
@@ -154,28 +164,52 @@ public partial class App : Application
         }
     }
 
-    public static void ExitApp()
+    private static void CleanupResources()
     {
-        _mainWindow?.PrepareClose();
+        ThemeService.Shutdown();
+
         if (_trayIcon != null)
         {
-            _trayIcon.Visible = false;
-            _trayIcon.Icon?.Dispose();
-            _trayIcon.Dispose();
+            var icon = _trayIcon;
+            _trayIcon = null;
+            try
+            {
+                icon.Visible = false;
+                icon.Icon?.Dispose();
+                icon.Dispose();
+            }
+            catch { }
         }
-        try { _mutex?.ReleaseMutex(); } catch { }
+
+        if (_mutex != null)
+        {
+            var mutex = _mutex;
+            _mutex = null;
+            try
+            {
+                mutex.ReleaseMutex();
+            }
+            catch { }
+            finally
+            {
+                mutex.Dispose();
+            }
+        }
+    }
+
+    public static void ExitApp()
+    {
+        _isExiting = true;
+        _mainWindow?.PrepareClose();
+        _mainWindow?.Close();
+        CleanupResources();
         Current.Shutdown();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = false;
-            _trayIcon.Icon?.Dispose();
-            _trayIcon.Dispose();
-        }
-        try { _mutex?.ReleaseMutex(); } catch { }
+        _isExiting = true;
+        CleanupResources();
         base.OnExit(e);
     }
 }

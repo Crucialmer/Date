@@ -7,9 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.0.16</Version>
+    <Version>1.0.17</Version>
+    <AssemblyVersion>1.0.17.0</AssemblyVersion>
+    <FileVersion>1.0.17.0</FileVersion>
     <AssemblyTitle>Date</AssemblyTitle>
-    <Description>基于 macOS 26 设计美学的 Windows 11 任务栏日期与星期显示小工具</Description>
+    <Description>基于 macOS 26 Liquid Glass 设计美学的 Windows 11 任务栏日期与星期显示小工具</Description>
     <Company>Crucialmer</Company>
     <Product>Date</Product>
     <Copyright>Copyright © 2026 Crucialmer</Copyright>
@@ -19,18 +21,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\app.ico" />
-    <Resource Include="Assets\tray.ico" />
+    <!-- 单文件绿色便携：仅内嵌必要资源（WPF Logo 与托盘图标），消除重复打包体积 -->
     <Resource Include="Assets\app.png" />
-    <Resource Include="Assets\tray.png" />
-    <EmbeddedResource Include="Assets\tray.ico" />
     <EmbeddedResource Include="Assets\app.ico" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="Assets\**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 </Project>
