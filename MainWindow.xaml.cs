@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private readonly AppConfig _config;
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _positionTimer;
+    private readonly DispatcherTimer _traySettleTimer;
+    private readonly TaskbarTrayMonitor _trayMonitor;
     private DispatcherTimer? _startupTimer;
     private HwndSource? _hwndSource;
     private ContextMenu? _contextMenu;
@@ -38,6 +40,7 @@ public partial class MainWindow : Window
     private bool _isClosing;
     private bool _isStartingUp = true;
     private bool? _isCompactTaskbar;
+    private long _lastTrayEventProbeTick;
 
     // ─── macOS 26 Liquid Glass 深色材质 (Obsidian Liquid Glass，全部冻结零开销) ───
     private static readonly LinearGradientBrush DarkPillBg;
@@ -259,9 +262,28 @@ public partial class MainWindow : Window
 
         _positionTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromSeconds(2)
+            Interval = TimeSpan.FromMilliseconds(1500)
         };
-        _positionTimer.Tick += (_, _) => UpdatePosition();
+        _positionTimer.Tick += (_, _) =>
+        {
+            UpdatePosition();
+            RequestAsyncTrayProbe();
+        };
+
+        // 托盘动画沉降计时器：捕获 Windows 11 XAML 托盘展开/收起动画结束后的最终静止坐标
+        _traySettleTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(360)
+        };
+        _traySettleTimer.Tick += (_, _) =>
+        {
+            _traySettleTimer.Stop();
+            if (_isClosing) return;
+            UpdatePosition();
+            RequestAsyncTrayProbe();
+        };
+
+        _trayMonitor = new TaskbarTrayMonitor(OnTaskbarTrayActivity);
 
         Loaded += MainWindow_Loaded;
         MouseRightButtonUp += MainWindow_MouseRightButtonUp;
@@ -291,12 +313,43 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RequestAsyncTrayProbe()
+    {
+        if (_isClosing) return;
+        TaskbarLocator.TriggerAsyncTrayBoundaryProbe(() =>
+        {
+            if (_isClosing) return;
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, UpdatePosition);
+        });
+    }
+
+    private void OnTaskbarTrayActivity()
+    {
+        if (_isClosing) return;
+
+        long now = Environment.TickCount64;
+        if (now - _lastTrayEventProbeTick >= 120)
+        {
+            _lastTrayEventProbeTick = now;
+            UpdatePosition();
+            RequestAsyncTrayProbe();
+        }
+
+        // 重置沉降定时器，待任务栏动画结束后再次精校，彻底杜绝停留在半动画位置覆盖 ^ 箭头
+        _traySettleTimer.Stop();
+        _traySettleTimer.Start();
+    }
+
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
         TaskbarLocator.ResetCache();
         _isCompactTaskbar = null;
-        Dispatcher.BeginInvoke(DispatcherPriority.Render, UpdatePosition);
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+        {
+            UpdatePosition();
+            RequestAsyncTrayProbe();
+        });
     }
 
     protected override void OnStateChanged(EventArgs e)
@@ -324,7 +377,9 @@ public partial class MainWindow : Window
         _isClosing = true;
         _clockTimer.Stop();
         _positionTimer.Stop();
+        _traySettleTimer.Stop();
         _startupTimer?.Stop();
+        _trayMonitor.Dispose();
 
         if (_hwndSource != null)
         {
@@ -348,6 +403,8 @@ public partial class MainWindow : Window
 
         UpdateDateTimeText();
         UpdatePosition();
+        RequestAsyncTrayProbe();
+        _trayMonitor.Attach();
 
         _clockTimer.Start();
 
@@ -393,6 +450,7 @@ public partial class MainWindow : Window
                 if (_isClosing) return;
                 TaskbarLocator.EnsureVisibleAndTopmost(this);
                 UpdatePosition();
+                RequestAsyncTrayProbe();
             });
         }
     }
@@ -406,6 +464,7 @@ public partial class MainWindow : Window
                 if (_isClosing) return;
                 TaskbarLocator.EnsureVisibleAndTopmost(this);
                 UpdatePosition();
+                RequestAsyncTrayProbe();
             });
         }
     }
@@ -420,13 +479,18 @@ public partial class MainWindow : Window
         const int WM_SYSCOMMAND = 0x0112;
         const int SC_MINIMIZE = 0xF020;
 
-        // 1. 任务栏重启广播通知（重新挂载宿主并重置定位缓存）
+        // 1. 任务栏重启广播通知（重新挂载宿主、重挂事件监听并重置定位缓存）
         if (WM_TASKBARCREATED != 0 && msg == WM_TASKBARCREATED)
         {
             TaskbarLocator.ApplyWindowStyles(this);
             TaskbarLocator.ResetCache();
             _isCompactTaskbar = null;
-            Dispatcher.BeginInvoke(DispatcherPriority.Render, UpdatePosition);
+            _trayMonitor.Attach();
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+            {
+                UpdatePosition();
+                RequestAsyncTrayProbe();
+            });
         }
 
         // 2. 阻止系统或桌面切换尝试隐藏胶囊窗口（如 Win+D / 显示桌面）
@@ -490,6 +554,7 @@ public partial class MainWindow : Window
                 if (_isClosing) return;
                 TaskbarLocator.EnsureVisibleAndTopmost(this);
                 UpdatePosition();
+                RequestAsyncTrayProbe();
             });
         }
 
@@ -661,8 +726,8 @@ public partial class MainWindow : Window
             var pos = TaskbarLocator.CalculatePosition(this, _config.OffsetLeft, PillContainer.Margin.Right);
             if (pos.HasValue)
             {
-                if (Math.Abs(Left - pos.Value.X) > 0.8) Left = pos.Value.X;
-                if (Math.Abs(Top - pos.Value.Y) > 0.6) Top = pos.Value.Y;
+                if (Math.Abs(Left - pos.Value.X) > 0.5) Left = pos.Value.X;
+                if (Math.Abs(Top - pos.Value.Y) > 0.5) Top = pos.Value.Y;
             }
 
             if (!_isStartingUp)
