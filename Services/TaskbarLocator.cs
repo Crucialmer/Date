@@ -611,4 +611,75 @@ public static class TaskbarLocator
 
         return anchor.LeftPx - (offsetDip * scale);
     }
+
+    /// <summary>
+    /// 在物理屏幕像素空间中将日历弹出卡片精准定位在悬浮胶囊正上方，右缘与胶囊右缘对齐，
+    /// 并自动钳制在当前显示器工作区安全边距内，杜绝跨 DPI / 触屏模式错位或边缘裁切。
+    /// </summary>
+    public static void PositionPopupAbovePill(
+        Window popup,
+        FrameworkElement visualCard,
+        Window anchorWindow,
+        FrameworkElement anchorPill,
+        double gapDip = 10.0)
+    {
+        try
+        {
+            var popupHwnd = new WindowInteropHelper(popup).Handle;
+            var anchorHwnd = new WindowInteropHelper(anchorWindow).Handle;
+            if (popupHwnd == IntPtr.Zero || anchorHwnd == IntPtr.Zero) return;
+
+            if (!GetWindowRect(anchorHwnd, out RECT anchorWinRect)) return;
+
+            IntPtr monitor = MonitorFromWindow(anchorHwnd, MONITOR_DEFAULTTONEAREST);
+            var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref mi)) return;
+
+            var (popupDpiX, popupDpiY) = GetWindowDpiScale(popup, 1.0);
+            var (anchorDpiX, anchorDpiY) = GetWindowDpiScale(anchorWindow, popupDpiX);
+
+            // 获取胶囊本体在屏幕上的真实物理边界
+            double pillWidthDip = anchorPill.ActualWidth > 0 ? anchorPill.ActualWidth : 230;
+            System.Windows.Point pillTopLeftDip = anchorPill.TranslatePoint(new System.Windows.Point(0, 0), anchorWindow);
+            double pillRightPx = anchorWinRect.Left + (pillTopLeftDip.X + pillWidthDip) * anchorDpiX;
+            double pillTopPx = anchorWinRect.Top + pillTopLeftDip.Y * anchorDpiY;
+
+            // 获取日历卡片本体（去除外层阴影 Margin）在 Popup 窗口内的物理坐标
+            double cardWidthDip = visualCard.ActualWidth > 0 ? visualCard.ActualWidth : 324;
+            double cardHeightDip = visualCard.ActualHeight > 0 ? visualCard.ActualHeight : 380;
+            System.Windows.Point cardTopLeftDip = visualCard.TranslatePoint(new System.Windows.Point(0, 0), popup);
+            double cardRightOffsetPx = (cardTopLeftDip.X + cardWidthDip) * popupDpiX;
+            double cardBottomOffsetPx = (cardTopLeftDip.Y + cardHeightDip) * popupDpiY;
+            double cardLeftOffsetPx = cardTopLeftDip.X * popupDpiX;
+            double cardTopOffsetPx = cardTopLeftDip.Y * popupDpiY;
+
+            double marginPx = 10.0 * popupDpiX;
+            double gapPx = gapDip * popupDpiY;
+
+            // 右缘与胶囊右缘对齐，同时保证卡片本体不超出当前显示器工作区左右安全边距
+            int minLeftPx = (int)Math.Round(mi.rcWork.Left + marginPx - cardLeftOffsetPx);
+            int maxLeftPx = (int)Math.Round(mi.rcWork.Right - marginPx - cardRightOffsetPx);
+            int targetLeftPx = (int)Math.Round(pillRightPx - cardRightOffsetPx);
+            targetLeftPx = Math.Clamp(targetLeftPx, minLeftPx, Math.Max(minLeftPx, maxLeftPx));
+
+            // 置于胶囊/任务栏正上方 gapDip 处（若上方空间不足则兜底置于工作区顶边距内）
+            IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
+            double anchorTopRefPx = pillTopPx;
+            if (taskbar != IntPtr.Zero && GetWindowRect(taskbar, out RECT tbRect) && tbRect.Top > mi.rcMonitor.Top + 100)
+            {
+                anchorTopRefPx = Math.Min(pillTopPx, tbRect.Top);
+            }
+
+            int minTopPx = (int)Math.Round(mi.rcWork.Top + marginPx - cardTopOffsetPx);
+            int targetTopPx = (int)Math.Round(anchorTopRefPx - gapPx - cardBottomOffsetPx);
+            if (targetTopPx < minTopPx)
+            {
+                targetTopPx = minTopPx;
+            }
+
+            SetWindowPos(popupHwnd, HWND_TOPMOST, targetLeftPx, targetTopPx, 0, 0,
+                SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch { }
+    }
 }

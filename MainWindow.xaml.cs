@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _startupTimer;
     private HwndSource? _hwndSource;
     private ContextMenu? _contextMenu;
+    private CalendarWindow? _calendarWindow;
 
     private bool _isDarkMode = true;
     private bool _isClosing;
@@ -316,6 +317,7 @@ public partial class MainWindow : Window
 
         Loaded += MainWindow_Loaded;
         MouseRightButtonUp += MainWindow_MouseRightButtonUp;
+        PillContainer.MouseLeftButtonUp += MainWindow_MouseLeftButtonUp;
         PillContainer.MouseEnter += (_, _) => AnimateHover(1.0, 140);
         PillContainer.MouseLeave += (_, _) => AnimateHover(0.0, 180);
     }
@@ -393,17 +395,21 @@ public partial class MainWindow : Window
     public void PrepareClose()
     {
         _isClosing = true;
+        _calendarWindow?.CloseSafely();
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         _isClosing = true;
+        _calendarWindow?.CloseSafely();
         base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _isClosing = true;
+        _calendarWindow?.CloseSafely();
+        _calendarWindow = null;
         _clockTimer.Stop();
         _positionTimer.Stop();
         _traySettleTimer.Stop();
@@ -783,8 +789,47 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    private void MainWindow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            e.Handled = true;
+            ToggleCalendar();
+        }
+    }
+
+    private void ToggleCalendar()
+    {
+        if (_isClosing || _isStartingUp) return;
+
+        if (_calendarWindow is { IsVisible: true })
+        {
+            _calendarWindow.CloseSafely();
+            _calendarWindow = null;
+            return;
+        }
+
+        // 防抖：点击胶囊收起日历时，CalendarWindow 会先失焦关闭，再触发胶囊 MouseLeftButtonUp，220ms 内不重开
+        if (Environment.TickCount64 - CalendarWindow.LastClosedTick < 220)
+        {
+            return;
+        }
+
+        var calendar = new CalendarWindow(this, PillContainer, _isDarkMode);
+        calendar.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_calendarWindow, calendar))
+            {
+                _calendarWindow = null;
+            }
+        };
+        _calendarWindow = calendar;
+        calendar.Show();
+    }
+
     private void MainWindow_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _calendarWindow?.CloseSafely();
         OpenMacContextMenu();
     }
 
@@ -816,6 +861,8 @@ public partial class MainWindow : Window
     public void OpenMacContextMenu()
     {
         if (_isClosing) return;
+
+        _calendarWindow?.CloseSafely();
 
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd != IntPtr.Zero)

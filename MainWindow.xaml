@@ -264,6 +264,7 @@
             CornerRadius="16"
             Margin="7,4"
             BorderThickness="1"
+            Cursor="Hand"
             VerticalAlignment="Center"
             HorizontalAlignment="Left"
             SnapsToDevicePixels="True">
