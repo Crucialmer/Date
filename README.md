@@ -56,7 +56,7 @@
   "ShowTime": true,
   "TimeFormat": "HH:mm",
   "ThemeMode": "Auto",
-  "OffsetLeft": 12,
+  "OffsetLeft": 0,
   "CheckUpdatesOnStartup": true,
   "AutoStart": false,
   "GitHubRepo": "Crucialmer/Date"

@@ -937,7 +937,7 @@ public partial class MainWindow : Window
             Icon = CreateMenuIcon(IconSpacing, iconBrush),
             Style = subMenuStyle
         };
-        foreach (var (label, offset) in new[] { ("极近 (0px)", 0), ("紧凑 (4px)", 4), ("标准 (12px)", 12), ("宽松 (20px)", 20) })
+        foreach (var (label, offset) in new[] { ("默认 (0px)", 0), ("紧凑 (4px)", 4), ("适中 (12px)", 12), ("宽松 (20px)", 20) })
         {
             int targetOffset = offset;
             var opt = new MenuItem

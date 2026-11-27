@@ -7,7 +7,7 @@ namespace Date.Models;
 
 public class AppConfig
 {
-    private const int LatestConfigVersion = 2;
+    private const int LatestConfigVersion = 3;
 
     // 默认 0 以便反序列化不含此字段的旧版 config.json 时准确触发一次性迁移
     public int ConfigVersion { get; set; } = 0;
@@ -22,8 +22,8 @@ public class AppConfig
     // "Auto", "Dark", "Light"
     public string ThemeMode { get; set; } = "Auto";
 
-    // 距离托盘区域（向上展开箭头 ^）左侧的逻辑间距（DIP，跨分辨率与跨缩放比自动等比统一）
-    public int OffsetLeft { get; set; } = 12;
+    // 距离托盘区域（向上展开箭头 ^）左侧的逻辑间距（DIP，默认 0，跨分辨率与跨缩放比自动等比统一）
+    public int OffsetLeft { get; set; } = 0;
 
     // 是否启动时自动检查更新
     public bool CheckUpdatesOnStartup { get; set; } = true;
@@ -86,12 +86,12 @@ public class AppConfig
             changed = true;
         }
 
-        // 将旧版未手动改动过的默认 OffsetLeft=8 一次性平滑迁移至 12 DIP，保证多台已安装设备观感完全一致
+        // 将旧版未手动改动过的默认 OffsetLeft (8 或 12) 一次性平滑迁移至新默认 0 DIP
         if (ConfigVersion < LatestConfigVersion)
         {
-            if (OffsetLeft == 8)
+            if (OffsetLeft is 8 or 12)
             {
-                OffsetLeft = 12;
+                OffsetLeft = 0;
             }
             ConfigVersion = LatestConfigVersion;
             changed = true;
@@ -99,7 +99,7 @@ public class AppConfig
 
         if (OffsetLeft < 0 || OffsetLeft > 200)
         {
-            OffsetLeft = 12;
+            OffsetLeft = 0;
             changed = true;
         }
 
