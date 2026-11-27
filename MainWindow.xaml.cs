@@ -42,9 +42,10 @@ public partial class MainWindow : Window
     private bool? _isCompactTaskbar;
     private long _lastTrayEventProbeTick;
 
-    // ─── macOS 26 Liquid Glass 深色材质 (Obsidian Liquid Glass，全部冻结零开销) ───
+    // ─── macOS 26 Liquid Glass 深色材质 (Obsidian Dual-Rim Liquid Glass，全部冻结零开销) ───
     private static readonly LinearGradientBrush DarkPillBg;
     private static readonly LinearGradientBrush DarkPillBorder;
+    private static readonly LinearGradientBrush DarkPillInnerRim;
     private static readonly LinearGradientBrush DarkGlassSheen;
     private static readonly SolidColorBrush DarkHoverOverlay;
     private static readonly SolidColorBrush DarkDateFg;
@@ -54,6 +55,7 @@ public partial class MainWindow : Window
 
     private static readonly LinearGradientBrush DarkMenuBg;
     private static readonly LinearGradientBrush DarkMenuBorder;
+    private static readonly LinearGradientBrush DarkMenuInnerRim;
     private static readonly LinearGradientBrush DarkMenuSheen;
     private static readonly SolidColorBrush DarkMenuFg;
     private static readonly SolidColorBrush DarkMenuSecondaryFg;
@@ -62,9 +64,10 @@ public partial class MainWindow : Window
     private static readonly SolidColorBrush DarkAccent;
     private static readonly SolidColorBrush DarkVersionPillBg;
 
-    // ─── macOS 26 Liquid Glass 浅色材质 (Crystal Liquid Glass，全部冻结零开销) ───
+    // ─── macOS 26 Liquid Glass 浅色材质 (Crystal Dual-Rim Liquid Glass，全周连续轮廓 + 内部纯白高光环) ───
     private static readonly LinearGradientBrush LightPillBg;
     private static readonly LinearGradientBrush LightPillBorder;
+    private static readonly LinearGradientBrush LightPillInnerRim;
     private static readonly LinearGradientBrush LightGlassSheen;
     private static readonly SolidColorBrush LightHoverOverlay;
     private static readonly SolidColorBrush LightDateFg;
@@ -74,6 +77,7 @@ public partial class MainWindow : Window
 
     private static readonly LinearGradientBrush LightMenuBg;
     private static readonly LinearGradientBrush LightMenuBorder;
+    private static readonly LinearGradientBrush LightMenuInnerRim;
     private static readonly LinearGradientBrush LightMenuSheen;
     private static readonly SolidColorBrush LightMenuFg;
     private static readonly SolidColorBrush LightMenuSecondaryFg;
@@ -95,22 +99,28 @@ public partial class MainWindow : Window
 
     static MainWindow()
     {
-        // ── 深色 Liquid Glass ──
+        // ── 深色 Liquid Glass（双环折射：柔和外廓 + 细腻内高光环） ──
         DarkPillBg = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0xD8, 0x2B, 0x2B, 0x33), 0.0),
-            (MediaColor.FromArgb(0xDF, 0x1D, 0x1D, 0x23), 0.48),
-            (MediaColor.FromArgb(0xE4, 0x17, 0x17, 0x1D), 1.0));
+            (MediaColor.FromArgb(0xDC, 0x2A, 0x2B, 0x33), 0.0),
+            (MediaColor.FromArgb(0xE3, 0x1C, 0x1D, 0x23), 0.48),
+            (MediaColor.FromArgb(0xE8, 0x16, 0x17, 0x1C), 1.0));
 
         DarkPillBorder = CreateFrozenGradient(
-            new MediaPoint(0.15, 0), new MediaPoint(0.85, 1),
-            (MediaColor.FromArgb(0x6E, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x26, 0xFF, 0xFF, 0xFF), 0.45),
-            (MediaColor.FromArgb(0x3A, 0xFF, 0xFF, 0xFF), 1.0));
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x5A, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x26, 0xFF, 0xFF, 0xFF), 0.48),
+            (MediaColor.FromArgb(0x36, 0xFF, 0xFF, 0xFF), 1.0));
+
+        DarkPillInnerRim = CreateFrozenGradient(
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x24, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.48),
+            (MediaColor.FromArgb(0x10, 0xFF, 0xFF, 0xFF), 1.0));
 
         DarkGlassSheen = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x1C, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x14, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.0));
 
         DarkHoverOverlay = CreateFrozenBrush(MediaColor.FromArgb(0x14, 0xFF, 0xFF, 0xFF));
@@ -119,12 +129,12 @@ public partial class MainWindow : Window
 
         DarkBadgeBg = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x22, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x12, 0xFF, 0xFF, 0xFF), 1.0));
+            (MediaColor.FromArgb(0x20, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x11, 0xFF, 0xFF, 0xFF), 1.0));
 
         DarkBadgeBorder = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x36, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x34, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x14, 0xFF, 0xFF, 0xFF), 1.0));
 
         DarkMenuBg = CreateFrozenGradient(
@@ -133,14 +143,20 @@ public partial class MainWindow : Window
             (MediaColor.FromArgb(0xF0, 0x1A, 0x1A, 0x20), 1.0));
 
         DarkMenuBorder = CreateFrozenGradient(
-            new MediaPoint(0.1, 0), new MediaPoint(0.9, 1),
-            (MediaColor.FromArgb(0x5A, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x20, 0xFF, 0xFF, 0xFF), 0.5),
-            (MediaColor.FromArgb(0x30, 0xFF, 0xFF, 0xFF), 1.0));
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x52, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x22, 0xFF, 0xFF, 0xFF), 0.5),
+            (MediaColor.FromArgb(0x32, 0xFF, 0xFF, 0xFF), 1.0));
+
+        DarkMenuInnerRim = CreateFrozenGradient(
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x20, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.5),
+            (MediaColor.FromArgb(0x0E, 0xFF, 0xFF, 0xFF), 1.0));
 
         DarkMenuSheen = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x16, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x12, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.0));
 
         DarkMenuFg = CreateFrozenBrush(MediaColor.FromRgb(0xF5, 0xF5, 0xF7));
@@ -150,22 +166,28 @@ public partial class MainWindow : Window
         DarkAccent = CreateFrozenBrush(MediaColor.FromRgb(0x0A, 0x84, 0xFF));
         DarkVersionPillBg = CreateFrozenBrush(MediaColor.FromArgb(0x26, 0x0A, 0x84, 0xFF));
 
-        // ── 浅色 Liquid Glass ──
+        // ── 浅色 Liquid Glass（全周均匀浅灰外廓 + 内部 1px 纯白晶体高光环，杜绝左上描边融底） ──
         LightPillBg = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0xF5, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0xEE, 0xF4, 0xF5, 0xF9), 0.52),
-            (MediaColor.FromArgb(0xE8, 0xEB, 0xED, 0xF4), 1.0));
+            (MediaColor.FromArgb(0xF7, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0xF0, 0xF5, 0xF6, 0xFA), 0.52),
+            (MediaColor.FromArgb(0xEA, 0xEC, 0xEE, 0xF5), 1.0));
 
         LightPillBorder = CreateFrozenGradient(
-            new MediaPoint(0.15, 0), new MediaPoint(0.85, 1),
-            (MediaColor.FromArgb(0xEE, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x22, 0x00, 0x00, 0x00), 0.45),
-            (MediaColor.FromArgb(0x32, 0x00, 0x00, 0x00), 1.0));
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x22, 0x00, 0x00, 0x00), 0.0),
+            (MediaColor.FromArgb(0x28, 0x00, 0x00, 0x00), 0.50),
+            (MediaColor.FromArgb(0x36, 0x00, 0x00, 0x00), 1.0));
+
+        LightPillInnerRim = CreateFrozenGradient(
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0xF0, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x55, 0xFF, 0xFF, 0xFF), 0.50),
+            (MediaColor.FromArgb(0x90, 0xFF, 0xFF, 0xFF), 1.0));
 
         LightGlassSheen = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x78, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x66, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.0));
 
         LightHoverOverlay = CreateFrozenBrush(MediaColor.FromArgb(0x0A, 0x00, 0x00, 0x00));
@@ -175,27 +197,33 @@ public partial class MainWindow : Window
         LightBadgeBg = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
             (MediaColor.FromArgb(0x0D, 0x00, 0x00, 0x00), 0.0),
-            (MediaColor.FromArgb(0x06, 0x00, 0x00, 0x00), 1.0));
+            (MediaColor.FromArgb(0x07, 0x00, 0x00, 0x00), 1.0));
 
         LightBadgeBorder = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0xCC, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x16, 0x00, 0x00, 0x00), 1.0));
+            (MediaColor.FromArgb(0x14, 0x00, 0x00, 0x00), 0.0),
+            (MediaColor.FromArgb(0x1C, 0x00, 0x00, 0x00), 1.0));
 
         LightMenuBg = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0xF6, 0xFB, 0xFB, 0xFD), 0.0),
-            (MediaColor.FromArgb(0xF0, 0xF1, 0xF2, 0xF7), 1.0));
+            (MediaColor.FromArgb(0xF7, 0xFC, 0xFC, 0xFE), 0.0),
+            (MediaColor.FromArgb(0xF2, 0xF1, 0xF3, 0xF8), 1.0));
 
         LightMenuBorder = CreateFrozenGradient(
-            new MediaPoint(0.1, 0), new MediaPoint(0.9, 1),
-            (MediaColor.FromArgb(0xF0, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x1E, 0x00, 0x00, 0x00), 0.5),
-            (MediaColor.FromArgb(0x2C, 0x00, 0x00, 0x00), 1.0));
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x20, 0x00, 0x00, 0x00), 0.0),
+            (MediaColor.FromArgb(0x26, 0x00, 0x00, 0x00), 0.5),
+            (MediaColor.FromArgb(0x32, 0x00, 0x00, 0x00), 1.0));
+
+        LightMenuInnerRim = CreateFrozenGradient(
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0xEE, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x50, 0xFF, 0xFF, 0xFF), 0.5),
+            (MediaColor.FromArgb(0x88, 0xFF, 0xFF, 0xFF), 1.0));
 
         LightMenuSheen = CreateFrozenGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x70, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x60, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.0));
 
         LightMenuFg = CreateFrozenBrush(MediaColor.FromRgb(0x14, 0x14, 0x18));
@@ -578,6 +606,7 @@ public partial class MainWindow : Window
         {
             PillContainer.Background = DarkPillBg;
             PillContainer.BorderBrush = DarkPillBorder;
+            InnerRim.BorderBrush = DarkPillInnerRim;
             GlassSheen.Background = DarkGlassSheen;
             HoverOverlay.Background = DarkHoverOverlay;
             TxtDate.Foreground = DarkDateFg;
@@ -586,10 +615,11 @@ public partial class MainWindow : Window
             TxtDayOfWeek.Foreground = DarkDayFg;
             TxtTime.Foreground = DarkDateFg;
             PillShadow.Color = MediaColor.FromRgb(0x00, 0x00, 0x00);
-            PillShadow.Opacity = 0.24;
+            PillShadow.Opacity = 0.22;
 
             Resources["MenuBgBrush"] = DarkMenuBg;
             Resources["MenuBorderBrush"] = DarkMenuBorder;
+            Resources["MenuInnerRimBrush"] = DarkMenuInnerRim;
             Resources["MenuSheenBrush"] = DarkMenuSheen;
             Resources["MenuItemFgBrush"] = DarkMenuFg;
             Resources["MenuSecondaryFgBrush"] = DarkMenuSecondaryFg;
@@ -602,6 +632,7 @@ public partial class MainWindow : Window
         {
             PillContainer.Background = LightPillBg;
             PillContainer.BorderBrush = LightPillBorder;
+            InnerRim.BorderBrush = LightPillInnerRim;
             GlassSheen.Background = LightGlassSheen;
             HoverOverlay.Background = LightHoverOverlay;
             TxtDate.Foreground = LightDateFg;
@@ -610,10 +641,11 @@ public partial class MainWindow : Window
             TxtDayOfWeek.Foreground = LightDayFg;
             TxtTime.Foreground = LightDateFg;
             PillShadow.Color = MediaColor.FromRgb(0x40, 0x45, 0x55);
-            PillShadow.Opacity = 0.12;
+            PillShadow.Opacity = 0.11;
 
             Resources["MenuBgBrush"] = LightMenuBg;
             Resources["MenuBorderBrush"] = LightMenuBorder;
+            Resources["MenuInnerRimBrush"] = LightMenuInnerRim;
             Resources["MenuSheenBrush"] = LightMenuSheen;
             Resources["MenuItemFgBrush"] = LightMenuFg;
             Resources["MenuSecondaryFgBrush"] = LightMenuSecondaryFg;
@@ -677,16 +709,17 @@ public partial class MainWindow : Window
 
         if (isCompact)
         {
-            PillContainer.CornerRadius = new CornerRadius(11.5);
+            PillContainer.CornerRadius = new CornerRadius(12.5);
             PillContainer.Margin = new Thickness(5, 2, 5, 2);
-            GlassSheen.CornerRadius = new CornerRadius(10.5, 10.5, 6, 6);
-            GlassSheen.Height = 10;
-            HoverOverlay.CornerRadius = new CornerRadius(10.5);
-            ContentStack.Margin = new Thickness(10, 1.5, 10, 1.5);
+            InnerRim.CornerRadius = new CornerRadius(11.5);
+            GlassSheen.CornerRadius = new CornerRadius(11, 11, 6, 6);
+            GlassSheen.Height = 9;
+            HoverOverlay.CornerRadius = new CornerRadius(11.5);
+            ContentStack.Margin = new Thickness(10.5, 2, 10.5, 2);
             DayBadge.CornerRadius = new CornerRadius(7);
-            DayBadge.Padding = new Thickness(6, 1, 6, 1);
-            DayBadge.Margin = new Thickness(6.5, 0, 0, 0);
-            TxtTime.Margin = new Thickness(6.5, 0, 0, 0);
+            DayBadge.Padding = new Thickness(6, 0.5, 6, 0.5);
+            DayBadge.Margin = new Thickness(7, 0, 0, 0);
+            TxtTime.Margin = new Thickness(7, 0, 0, 0);
             TxtDate.FontSize = 12.5;
             TxtDayOfWeek.FontSize = 12.5;
             TxtTime.FontSize = 12.5;
@@ -694,16 +727,17 @@ public partial class MainWindow : Window
         }
         else
         {
-            PillContainer.CornerRadius = new CornerRadius(14);
-            PillContainer.Margin = new Thickness(6, 4, 6, 4);
-            GlassSheen.CornerRadius = new CornerRadius(13, 13, 8, 8);
-            GlassSheen.Height = 14;
-            HoverOverlay.CornerRadius = new CornerRadius(13);
-            ContentStack.Margin = new Thickness(13, 3.5, 13, 3.5);
-            DayBadge.CornerRadius = new CornerRadius(8.5);
-            DayBadge.Padding = new Thickness(7.5, 1.5, 7.5, 1.5);
-            DayBadge.Margin = new Thickness(8, 0, 0, 0);
-            TxtTime.Margin = new Thickness(8, 0, 0, 0);
+            PillContainer.CornerRadius = new CornerRadius(16);
+            PillContainer.Margin = new Thickness(7, 4, 7, 4);
+            InnerRim.CornerRadius = new CornerRadius(15);
+            GlassSheen.CornerRadius = new CornerRadius(14.5, 14.5, 8, 8);
+            GlassSheen.Height = 13;
+            HoverOverlay.CornerRadius = new CornerRadius(15);
+            ContentStack.Margin = new Thickness(14, 3.5, 14, 3.5);
+            DayBadge.CornerRadius = new CornerRadius(9);
+            DayBadge.Padding = new Thickness(8, 1.5, 8, 1.5);
+            DayBadge.Margin = new Thickness(9, 0, 0, 0);
+            TxtTime.Margin = new Thickness(9, 0, 0, 0);
             TxtDate.FontSize = 14.0;
             TxtDayOfWeek.FontSize = 14.0;
             TxtTime.FontSize = 14.0;
@@ -728,15 +762,24 @@ public partial class MainWindow : Window
             {
                 if (Math.Abs(Left - pos.Value.X) > 0.5) Left = pos.Value.X;
                 if (Math.Abs(Top - pos.Value.Y) > 0.5) Top = pos.Value.Y;
-            }
 
-            if (!_isStartingUp)
+                if (!_isStartingUp)
+                {
+                    if (pos.Value.IsTaskbarAutoHidden)
+                    {
+                        if (Opacity > 0.0) Opacity = 0.0;
+                    }
+                    else
+                    {
+                        TaskbarLocator.EnsureVisibleAndTopmostIfNeeded(this);
+                        if (Opacity < 1.0) Opacity = 1.0;
+                    }
+                }
+            }
+            else if (!_isStartingUp)
             {
                 TaskbarLocator.EnsureVisibleAndTopmostIfNeeded(this);
-                if (Opacity < 1.0)
-                {
-                    Opacity = 1.0;
-                }
+                if (Opacity < 1.0) Opacity = 1.0;
             }
         }
         catch { }

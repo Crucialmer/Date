@@ -17,8 +17,8 @@ public class AppConfig
     // "Auto", "Dark", "Light"
     public string ThemeMode { get; set; } = "Auto";
 
-    // 距离托盘区域左侧的像素间距
-    public int OffsetLeft { get; set; } = 8;
+    // 距离托盘区域（含向上展开箭头 ^）左侧的像素间距
+    public int OffsetLeft { get; set; } = 12;
 
     // 是否启动时自动检查更新
     public bool CheckUpdatesOnStartup { get; set; } = true;

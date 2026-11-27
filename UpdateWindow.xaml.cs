@@ -24,9 +24,10 @@ public partial class UpdateWindow : Window
     private readonly DispatcherTimer _autoCloseTimer;
     private CancellationTokenSource? _downloadCts;
 
-    // ─── macOS 26 Liquid Glass 更新卡片材质（冻结复用） ───
+    // ─── macOS 26 Liquid Glass 更新卡片材质（双环折射，冻结复用） ───
     private static readonly LinearGradientBrush DarkCardBg;
     private static readonly LinearGradientBrush DarkCardBorder;
+    private static readonly LinearGradientBrush DarkCardInnerRim;
     private static readonly LinearGradientBrush DarkCardSheen;
     private static readonly SolidColorBrush DarkNotesBg;
     private static readonly SolidColorBrush DarkNotesBorder;
@@ -45,6 +46,7 @@ public partial class UpdateWindow : Window
 
     private static readonly LinearGradientBrush LightCardBg;
     private static readonly LinearGradientBrush LightCardBorder;
+    private static readonly LinearGradientBrush LightCardInnerRim;
     private static readonly LinearGradientBrush LightCardSheen;
     private static readonly SolidColorBrush LightNotesBg;
     private static readonly SolidColorBrush LightNotesBorder;
@@ -68,13 +70,18 @@ public partial class UpdateWindow : Window
             (MediaColor.FromArgb(0xF0, 0x26, 0x26, 0x2E), 0.0),
             (MediaColor.FromArgb(0xF4, 0x1A, 0x1A, 0x20), 1.0));
         DarkCardBorder = FreezeGradient(
-            new MediaPoint(0.1, 0), new MediaPoint(0.9, 1),
-            (MediaColor.FromArgb(0x5E, 0xFF, 0xFF, 0xFF), 0.0),
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x52, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x22, 0xFF, 0xFF, 0xFF), 0.5),
-            (MediaColor.FromArgb(0x34, 0xFF, 0xFF, 0xFF), 1.0));
+            (MediaColor.FromArgb(0x32, 0xFF, 0xFF, 0xFF), 1.0));
+        DarkCardInnerRim = FreezeGradient(
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x20, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.5),
+            (MediaColor.FromArgb(0x0E, 0xFF, 0xFF, 0xFF), 1.0));
         DarkCardSheen = FreezeGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x18, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x14, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.0));
         DarkNotesBg = FreezeBrush(MediaColor.FromArgb(0x16, 0xFF, 0xFF, 0xFF));
         DarkNotesBorder = FreezeBrush(MediaColor.FromArgb(0x1E, 0xFF, 0xFF, 0xFF));
@@ -93,16 +100,21 @@ public partial class UpdateWindow : Window
 
         LightCardBg = FreezeGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0xF7, 0xFC, 0xFC, 0xFE), 0.0),
-            (MediaColor.FromArgb(0xF2, 0xF1, 0xF2, 0xF7), 1.0));
+            (MediaColor.FromArgb(0xF8, 0xFD, 0xFD, 0xFF), 0.0),
+            (MediaColor.FromArgb(0xF2, 0xF1, 0xF3, 0xF8), 1.0));
         LightCardBorder = FreezeGradient(
-            new MediaPoint(0.1, 0), new MediaPoint(0.9, 1),
-            (MediaColor.FromArgb(0xF5, 0xFF, 0xFF, 0xFF), 0.0),
-            (MediaColor.FromArgb(0x20, 0x00, 0x00, 0x00), 0.5),
-            (MediaColor.FromArgb(0x30, 0x00, 0x00, 0x00), 1.0));
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0x20, 0x00, 0x00, 0x00), 0.0),
+            (MediaColor.FromArgb(0x26, 0x00, 0x00, 0x00), 0.5),
+            (MediaColor.FromArgb(0x34, 0x00, 0x00, 0x00), 1.0));
+        LightCardInnerRim = FreezeGradient(
+            new MediaPoint(0, 0), new MediaPoint(0, 1),
+            (MediaColor.FromArgb(0xEE, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x50, 0xFF, 0xFF, 0xFF), 0.5),
+            (MediaColor.FromArgb(0x88, 0xFF, 0xFF, 0xFF), 1.0));
         LightCardSheen = FreezeGradient(
             new MediaPoint(0, 0), new MediaPoint(0, 1),
-            (MediaColor.FromArgb(0x80, 0xFF, 0xFF, 0xFF), 0.0),
+            (MediaColor.FromArgb(0x66, 0xFF, 0xFF, 0xFF), 0.0),
             (MediaColor.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1.0));
         LightNotesBg = FreezeBrush(MediaColor.FromArgb(0x0A, 0x00, 0x00, 0x00));
         LightNotesBorder = FreezeBrush(MediaColor.FromArgb(0x12, 0x00, 0x00, 0x00));
@@ -211,6 +223,7 @@ public partial class UpdateWindow : Window
         {
             CardContainer.Background = DarkCardBg;
             CardContainer.BorderBrush = DarkCardBorder;
+            CardInnerRim.BorderBrush = DarkCardInnerRim;
             CardSheen.Background = DarkCardSheen;
             NotesContainer.Background = DarkNotesBg;
             NotesContainer.BorderBrush = DarkNotesBorder;
@@ -239,6 +252,7 @@ public partial class UpdateWindow : Window
         {
             CardContainer.Background = LightCardBg;
             CardContainer.BorderBrush = LightCardBorder;
+            CardInnerRim.BorderBrush = LightCardInnerRim;
             CardSheen.Background = LightCardSheen;
             NotesContainer.Background = LightNotesBg;
             NotesContainer.BorderBrush = LightNotesBorder;

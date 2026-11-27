@@ -26,8 +26,44 @@ public static class TaskbarLocator
 
     public const int SW_SHOWNOACTIVATE = 4;
     private const uint GW_HWNDPREV = 3;
+    private const uint ABM_GETSTATE = 0x00000004;
+    private const int ABS_AUTOHIDE = 0x0000001;
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("shell32.dll")]
+    private static extern IntPtr SHAppBarMessage(uint dwMessage, ref APPBARDATA pData);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct APPBARDATA
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public uint uCallbackMessage;
+        public uint uEdge;
+        public RECT rc;
+        public IntPtr lParam;
+    }
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -429,18 +465,68 @@ public static class TaskbarLocator
     }
 
     /// <summary>
+    /// 获取任务栏所在显示器的精确 DPI 缩放比（支持多屏混合 DPI，回退至 WPF PresentationSource）
+    /// </summary>
+    private static (double DpiX, double DpiY) GetEffectiveTaskbarDpi(Window window, IntPtr taskbar)
+    {
+        try
+        {
+            if (taskbar != IntPtr.Zero)
+            {
+                uint dpi = GetDpiForWindow(taskbar);
+                if (dpi >= 96 && dpi <= 960)
+                {
+                    double scale = dpi / 96.0;
+                    return (scale, scale);
+                }
+            }
+        }
+        catch { }
+
+        var source = PresentationSource.FromVisual(window);
+        double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+        return (dpiX, dpiY);
+    }
+
+    /// <summary>
+    /// 检测任务栏是否开启了“自动隐藏”且当前处于完全收起状态
+    /// </summary>
+    private static bool IsTaskbarCurrentlyAutoHidden(IntPtr taskbar, RECT taskbarRect)
+    {
+        try
+        {
+            var abd = new APPBARDATA { cbSize = Marshal.SizeOf<APPBARDATA>() };
+            int state = SHAppBarMessage(ABM_GETSTATE, ref abd).ToInt32();
+            if ((state & ABS_AUTOHIDE) == 0) return false;
+
+            IntPtr monitor = MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST);
+            if (monitor == IntPtr.Zero) return false;
+
+            var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (!GetMonitorInfo(monitor, ref mi)) return false;
+
+            // 底部任务栏收起时其 Top 贴近或超出显示器底边；顶部任务栏收起时其 Bottom 贴近顶边
+            return taskbarRect.Top >= mi.rcMonitor.Bottom - 6
+                || taskbarRect.Bottom <= mi.rcMonitor.Top + 6;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 仅探测当前任务栏高度（DIP），用于在计算最终窗口坐标前先确定标准/紧凑排版尺寸
     /// </summary>
     public static double GetTaskbarHeightDip(Window window)
     {
         try
         {
-            var source = PresentationSource.FromVisual(window);
-            double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
-
             IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
             if (taskbar != IntPtr.Zero && GetWindowRect(taskbar, out RECT rect) && (rect.Right - rect.Left) > 100)
             {
+                var (_, dpiY) = GetEffectiveTaskbarDpi(window, taskbar);
                 double heightDip = (rect.Bottom - rect.Top) / dpiY;
                 _lastKnownGoodTaskbarHeightDip = heightDip;
                 return heightDip;
@@ -453,9 +539,9 @@ public static class TaskbarLocator
 
     /// <summary>
     /// 双层融合（Windows 11 XAML UIA 真实托盘/展开箭头 + Win32 TrayNotifyWnd）精确计算悬浮胶囊位置。
-    /// 始终以最靠左的真实托盘边界为准，彻底杜绝托盘图标增减时覆盖向上展开箭头 (^)。
+    /// 始终以最靠左的真实托盘边界为准，扣除 Win11 顶部 1px 分隔线实现光学上下居中，并感知任务栏自动隐藏状态。
     /// </summary>
-    public static (double X, double Y, double TaskbarHeight)? CalculatePosition(
+    public static (double X, double Y, double TaskbarHeight, bool IsTaskbarAutoHidden)? CalculatePosition(
         Window window,
         int offsetLeft,
         double visualRightMarginDip = 0)
@@ -465,16 +551,14 @@ public static class TaskbarLocator
             var hwnd = new WindowInteropHelper(window).Handle;
             if (hwnd == IntPtr.Zero) return null;
 
-            var source = PresentationSource.FromVisual(window);
-            double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-            double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
-
             IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
+            var (dpiX, dpiY) = GetEffectiveTaskbarDpi(window, taskbar);
             RECT taskbarRect = default;
             bool hasTaskbar = taskbar != IntPtr.Zero
                               && GetWindowRect(taskbar, out taskbarRect)
                               && (taskbarRect.Right - taskbarRect.Left) > 100;
 
+            bool isAutoHidden = hasTaskbar && IsTaskbarCurrentlyAutoHidden(taskbar, taskbarRect);
             double taskbarLeftDip, taskbarRightDip, taskbarTopDip, taskbarHeightDip;
 
             if (hasTaskbar)
@@ -501,7 +585,7 @@ public static class TaskbarLocator
                 double fallbackX = SystemParameters.WorkArea.Right - window.ActualWidth - 220 - offsetLeft + visualRightMarginDip;
                 double fallbackY = SystemParameters.WorkArea.Bottom
                                    + (SystemParameters.PrimaryScreenHeight - SystemParameters.WorkArea.Bottom - window.ActualHeight) / 2.0;
-                return (fallbackX, fallbackY, 48);
+                return (fallbackX, fallbackY, 48, false);
             }
 
             // 读取 Win32 托盘左边界
@@ -522,9 +606,6 @@ public static class TaskbarLocator
             double trayLeftInDip;
             if (uiaFresh && hasWin32)
             {
-                // 若 UIA 已直接定位到真实 XAML 托盘/展开箭头，优先采用最严格（最靠左）的边界，
-                // 彻底避免 Win11 中 TrayNotifyWnd 滞后或未包含 ^ 箭头导致的覆盖。
-                // 同时防止异常滞后的 Win32 边界比 UIA 展开箭头偏左超过 120px。
                 double effectivePx = (uiaFoundChevron && (uiaTrayLeftPx - win32TrayLeftPx) > 120)
                     ? uiaTrayLeftPx
                     : Math.Min(uiaTrayLeftPx, win32TrayLeftPx);
@@ -558,10 +639,11 @@ public static class TaskbarLocator
             double targetX = trayLeftInDip - windowWidth + visualRightMarginDip - offsetLeft;
             targetX = Math.Max(taskbarLeftDip, Math.Min(targetX, taskbarRightDip - windowWidth - 4));
 
-            // Y 轴绝对数学上下居中
-            double targetY = taskbarTopDip + (taskbarHeightDip - windowHeight) / 2.0;
+            // Y 轴光学上下居中（扣除 Windows 11 任务栏顶部 1px 分隔线，与任务栏内腔视觉中心严格对齐）
+            double topBorderDip = taskbarHeightDip >= 30 ? (1.0 / dpiY) : 0.0;
+            double targetY = taskbarTopDip + topBorderDip + (taskbarHeightDip - topBorderDip - windowHeight) / 2.0;
 
-            return (targetX, targetY, taskbarHeightDip);
+            return (targetX, targetY, taskbarHeightDip, isAutoHidden);
         }
         catch
         {

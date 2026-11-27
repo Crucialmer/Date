@@ -20,7 +20,8 @@
         <!-- 动态主题笔刷 (深色为默认，由 ApplyTheme 冻结并实时同步切换) -->
         <SolidColorBrush x:Key="MenuBgBrush" Color="#EB1C1C22"/>
         <SolidColorBrush x:Key="MenuBorderBrush" Color="#48FFFFFF"/>
-        <SolidColorBrush x:Key="MenuSheenBrush" Color="#16FFFFFF"/>
+        <SolidColorBrush x:Key="MenuInnerRimBrush" Color="#1FFFFFFF"/>
+        <SolidColorBrush x:Key="MenuSheenBrush" Color="#14FFFFFF"/>
         <SolidColorBrush x:Key="MenuItemFgBrush" Color="#FFF5F5F7"/>
         <SolidColorBrush x:Key="MenuSecondaryFgBrush" Color="#99EBEBF5"/>
         <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#26FFFFFF"/>
@@ -28,7 +29,7 @@
         <SolidColorBrush x:Key="MenuAccentBrush" Color="#FF0A84FF"/>
         <SolidColorBrush x:Key="MenuVersionPillBgBrush" Color="#240A84FF"/>
 
-        <!-- macOS 26 标题头部样式 (不可点击的精致元信息行) -->
+        <!-- macOS 26 标题头部样式 -->
         <Style x:Key="MacMenuHeaderStyle" TargetType="MenuItem">
             <Setter Property="IsEnabled" Value="False"/>
             <Setter Property="Foreground" Value="{DynamicResource MenuItemFgBrush}"/>
@@ -45,7 +46,7 @@
             </Setter>
         </Style>
 
-        <!-- macOS 26 Liquid Glass 菜单项样式 (全动态深浅色自适应 + 矢量图标 + 同心圆角) -->
+        <!-- macOS 26 Liquid Glass 菜单项样式 -->
         <Style x:Key="MacMenuItemStyle" TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource MenuItemFgBrush}"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"/>
@@ -120,7 +121,7 @@
             </Setter>
         </Style>
 
-        <!-- macOS 26 Liquid Glass 右键上下文菜单 (消除系统矩形阴影裁切，圆润通透) -->
+        <!-- macOS 26 Liquid Glass 双环折射右键菜单 -->
         <ContextMenu x:Key="MacContextMenu"
                      StaysOpen="False"
                      HasDropShadow="False">
@@ -132,8 +133,7 @@
                             Background="{DynamicResource MenuBgBrush}"
                             BorderBrush="{DynamicResource MenuBorderBrush}"
                             BorderThickness="1"
-                            Padding="4"
-                            MinWidth="204"
+                            MinWidth="206"
                             SnapsToDevicePixels="True">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="22"
@@ -143,13 +143,19 @@
                                               Color="#000000"/>
                         </Border.Effect>
                         <Grid>
-                            <!-- 顶部微折射玻璃柔光层 -->
+                            <!-- 内部 1px 晶体高光环（浅色模式清晰立体，深色模式温润折射） -->
+                            <Border CornerRadius="13"
+                                    BorderBrush="{DynamicResource MenuInnerRimBrush}"
+                                    BorderThickness="1"
+                                    IsHitTestVisible="False"/>
+                            <!-- 顶部微折射柔光层 -->
                             <Border CornerRadius="13,13,6,6"
                                     VerticalAlignment="Top"
-                                    Height="26"
+                                    Height="24"
+                                    Margin="1,1,1,0"
                                     IsHitTestVisible="False"
                                     Background="{DynamicResource MenuSheenBrush}"/>
-                            <StackPanel IsItemsHost="True"/>
+                            <StackPanel IsItemsHost="True" Margin="4"/>
                         </Grid>
                     </Border>
                 </ControlTemplate>
@@ -157,10 +163,10 @@
         </ContextMenu>
     </Window.Resources>
 
-    <!-- macOS 26 Liquid Glass 悬浮药丸胶囊（对称阴影留白防裁切，各向异性高光边框 + 液态折射层 + 悬停微光） -->
+    <!-- macOS 26 Liquid Glass 双环光学折射悬浮胶囊（全曲面同心圆角 + 外廓连续描边 + 内部晶体高光环 + 光学垂直居中） -->
     <Border x:Name="PillContainer"
-            CornerRadius="14"
-            Margin="6,4"
+            CornerRadius="16"
+            Margin="7,4"
             BorderThickness="1"
             VerticalAlignment="Center"
             HorizontalAlignment="Left"
@@ -176,56 +182,65 @@
         </Border.Effect>
 
         <Grid>
-            <!-- 顶部液态玻璃折射微光层 (模拟 macOS 26 Liquid Glass 曲面聚光) -->
-            <Border x:Name="GlassSheen"
-                    CornerRadius="13,13,8,8"
-                    VerticalAlignment="Top"
-                    Height="14"
-                    Margin="0.5,0.5,0.5,0"
+            <!-- 内部 1px 液态晶体高光环：解决浅色模式左上轮廓融底问题，深色模式增强玻璃厚度折射 -->
+            <Border x:Name="InnerRim"
+                    CornerRadius="15"
+                    BorderThickness="1"
                     IsHitTestVisible="False"/>
 
-            <!-- 指针悬停微光层 (响应式液态玻璃光泽，绝不争夺焦点) -->
+            <!-- 顶部柔光微折射层（轻盈克制，不压低文本光学重心） -->
+            <Border x:Name="GlassSheen"
+                    CornerRadius="14.5,14.5,8,8"
+                    VerticalAlignment="Top"
+                    Height="13"
+                    Margin="1,1,1,0"
+                    IsHitTestVisible="False"/>
+
+            <!-- 指针悬停微光响应层 -->
             <Border x:Name="HoverOverlay"
-                    CornerRadius="13"
+                    CornerRadius="15"
                     Opacity="0"
                     IsHitTestVisible="False"/>
 
-            <!-- 主内容区 -->
+            <!-- 主内容区（含 CJK 光学基线微校） -->
             <StackPanel x:Name="ContentStack"
                         Orientation="Horizontal"
-                        Margin="13,3.5"
+                        Margin="14,3.5"
                         VerticalAlignment="Center">
-                <!-- 日期 (14.0pt SemiBold，等宽数字对齐，极高可读性) -->
+                <!-- 日期 (完整 yyyy年M月d日，14.0pt SemiBold，等宽数字) -->
                 <TextBlock x:Name="TxtDate"
-                           Text="2026年11月25日"
+                           Text="2026年11月26日"
                            FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
                            FontSize="14"
                            FontWeight="SemiBold"
+                           Padding="0,0,0,0.6"
                            Typography.NumeralAlignment="Tabular"
                            VerticalAlignment="Center"/>
 
-                <!-- 星期几同心圆角微型液态玻璃徽章 -->
+                <!-- 星期几同心圆角液态玻璃微胶囊 -->
                 <Border x:Name="DayBadge"
-                        CornerRadius="8.5"
-                        Padding="7.5,1.5"
-                        Margin="8,0,0,0"
+                        CornerRadius="9"
+                        Padding="8,1.5"
+                        Margin="9,0,0,0"
                         BorderThickness="1"
                         VerticalAlignment="Center">
                     <TextBlock x:Name="TxtDayOfWeek"
-                               Text="星期三"
+                               Text="星期四"
                                FontFamily="Segoe UI Variable Text, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
                                FontSize="14"
                                FontWeight="SemiBold"
+                               Padding="0,0,0,0.6"
                                VerticalAlignment="Center"/>
                 </Border>
 
-                <!-- 实时时间 时:分 (14.0pt SemiBold，等宽数字防抖动) -->
+                <!-- 实时时间 时:分 (14.0pt SemiBold，等宽数字) -->
                 <TextBlock x:Name="TxtTime"
-                           Text="20:45"
+                           Text="17:08"
                            FontFamily="Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, PingFang SC, Microsoft YaHei UI"
                            FontSize="14"
                            FontWeight="SemiBold"
-                           Margin="8,0,0,0"
+                           Padding="0,0,0,0.6"
+                           Margin="9,0,0,0"
                            Typography.NumeralAlignment="Tabular"
                            VerticalAlignment="Center"/>
             </StackPanel>
