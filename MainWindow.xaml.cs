@@ -95,6 +95,7 @@ public partial class MainWindow : Window
     private static readonly Geometry IconRefresh = FreezeGeometry("M10.7,5.4 A4.5,4.5 0 1,0 10.4,8.6 M10.9,2.4 L10.9,5.6 L7.8,5.6");
     private static readonly Geometry IconShieldCheck = FreezeGeometry("M6.5,1.5 L10.7,3.2 L10.7,6.4 C10.7,9.0 8.9,10.7 6.5,11.6 C4.1,10.7 2.3,9.0 2.3,6.4 L2.3,3.2 Z M4.6,6.5 L6.0,7.9 L8.7,5.1");
     private static readonly Geometry IconFolder = FreezeGeometry("M1.6,3.5 C1.6,2.9 2.0,2.5 2.6,2.5 L5.1,2.5 L6.3,3.9 L10.4,3.9 C11.0,3.9 11.4,4.3 11.4,4.9 L11.4,9.5 C11.4,10.1 11.0,10.5 10.4,10.5 L2.6,10.5 C2.0,10.5 1.6,10.1 1.6,9.5 Z");
+    private static readonly Geometry IconSpacing = FreezeGeometry("M1.6,3.0 L1.6,10.0 M11.4,3.0 L11.4,10.0 M3.5,6.5 L9.5,6.5 M5.0,5.0 L3.5,6.5 L5.0,8.0 M8.0,5.0 L9.5,6.5 L8.0,8.0");
     private static readonly Geometry IconExit = FreezeGeometry("M6.5,1.6 L6.5,6.1 M3.7,3.5 A4.3,4.3 0 1,0 9.3,3.5");
 
     static MainWindow()
@@ -829,6 +830,7 @@ public partial class MainWindow : Window
 
         var headerStyle = Resources["MacMenuHeaderStyle"] as Style;
         var itemStyle = Resources["MacMenuItemStyle"] as Style;
+        var subMenuStyle = Resources["MacSubMenuItemStyle"] as Style;
         var separatorStyle = Resources["MacSeparatorStyle"] as Style;
         MediaBrush iconBrush = _isDarkMode ? DarkMenuSecondaryFg : LightMenuSecondaryFg;
         MediaBrush accentBrush = _isDarkMode ? DarkAccent : LightAccent;
@@ -928,7 +930,33 @@ public partial class MainWindow : Window
                 }
             });
 
+        // 距托盘间距子菜单（兼顾普通/触屏设备个性化微调）
+        var spacingMenu = new MenuItem
+        {
+            Header = "距托盘间距",
+            Icon = CreateMenuIcon(IconSpacing, iconBrush),
+            Style = subMenuStyle
+        };
+        foreach (var (label, offset) in new[] { ("极近 (0px)", 0), ("紧凑 (4px)", 4), ("标准 (12px)", 12), ("宽松 (20px)", 20) })
+        {
+            int targetOffset = offset;
+            var opt = new MenuItem
+            {
+                Header = label,
+                IsChecked = _config.OffsetLeft == targetOffset,
+                Style = itemStyle
+            };
+            opt.Click += (_, _) =>
+            {
+                _config.OffsetLeft = targetOffset;
+                _config.Save();
+                UpdatePosition();
+            };
+            spacingMenu.Items.Add(opt);
+        }
+
         _contextMenu.Items.Add(showTimeItem);
+        _contextMenu.Items.Add(spacingMenu);
         _contextMenu.Items.Add(autoStartItem);
         _contextMenu.Items.Add(new Separator { Style = separatorStyle });
 

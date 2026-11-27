@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Automation;
 using System.Windows.Interop;
 
 namespace Date.Services;
@@ -152,16 +151,6 @@ public static class TaskbarLocator
     private static long _uiaLastUpdatedTick;
     private static int _uiaProbeInFlight;
 
-    private static readonly System.Windows.Automation.Condition UiaTrayQueryCondition = new OrCondition(
-        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button),
-        new PropertyCondition(AutomationElement.AutomationIdProperty, "SystemTrayIcon"),
-        new PropertyCondition(AutomationElement.AutomationIdProperty, "NotifyItemIcon"),
-        new PropertyCondition(AutomationElement.ClassNameProperty, "SystemTray.ChevronIconView"),
-        new PropertyCondition(AutomationElement.ClassNameProperty, "SystemTray.NotifyIconView"),
-        new PropertyCondition(AutomationElement.ClassNameProperty, "SystemTray.IconView"),
-        new PropertyCondition(AutomationElement.ClassNameProperty, "SystemTray.OmniButton"),
-        new PropertyCondition(AutomationElement.ClassNameProperty, "SystemTray.NormalButton"));
-
     /// <summary>
     /// 重置位置缓存（用于分辨率改变、DPI 变更、任务栏重启或多显示器切换时重新测量）
     /// </summary>
@@ -181,8 +170,7 @@ public static class TaskbarLocator
     }
 
     /// <summary>
-    /// 在后台线程通过 UI Automation 批量缓存扫描 Windows 11 XAML 托盘最左侧真实叶子按钮（精确涵盖向上展开箭头 ^ 与全部可见托盘图标）。
-    /// 彻底排除 SystemTray.Stack / Frame 等含透明留白的布局容器，确保跨设备坐标完全一致。
+    /// 在后台线程通过原生 COM UIA3 (CUIAutomation8) 扫描 Windows 11 XAML Island 托盘真实叶子按钮（精准涵盖触屏/普通模式下的 ^ 展开箭头）。
     /// </summary>
     public static void TriggerAsyncTrayBoundaryProbe(Action onBoundaryChanged)
     {
@@ -193,8 +181,14 @@ public static class TaskbarLocator
         {
             try
             {
-                if (TryProbeXamlTrayAnchorPx(out TrayAnchorPx probed))
+                IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
+                if (taskbar == IntPtr.Zero || !GetWindowRect(taskbar, out RECT taskbarRect))
+                    return;
+
+                double dpiScale = GetTaskbarDpiScale(taskbar);
+                if (Uia3TrayScanner.TryFindLeftmostTrayAnchor(taskbar, taskbarRect, dpiScale, out var scanned))
                 {
+                    var probed = new TrayAnchorPx(scanned.LeftPx, scanned.WidthPx, scanned.IsChevron, IsUiaLeaf: true);
                     bool changed;
                     lock (UiaCacheLock)
                     {
@@ -214,147 +208,13 @@ public static class TaskbarLocator
             }
             catch
             {
-                // UIA 在资源管理器重启等极端瞬间可能抛 COMException，静默忽略并由 Win32 兜底
+                // UIA3 在资源管理器重启等极端瞬间可能失败，静默忽略并由 Win32 兜底
             }
             finally
             {
                 Interlocked.Exchange(ref _uiaProbeInFlight, 0);
             }
         });
-    }
-
-    private static bool TryProbeXamlTrayAnchorPx(out TrayAnchorPx anchor)
-    {
-        anchor = default;
-
-        IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
-        if (taskbar == IntPtr.Zero || !GetWindowRect(taskbar, out RECT taskbarRect))
-            return false;
-
-        int taskbarWidth = taskbarRect.Right - taskbarRect.Left;
-        if (taskbarWidth <= 200) return false;
-
-        double dpiScale = GetTaskbarDpiScale(taskbar);
-
-        // 仅接受位于任务栏右侧合理区域的真实叶子托盘按钮（过滤整栏或托盘栈级宽容器）
-        double minValidLeft = taskbarRect.Left + taskbarWidth * 0.35;
-        double maxLeafWidthPx = Math.Min(taskbarWidth * 0.25, 180.0 * dpiScale);
-        double minLeafSizePx = 8.0 * dpiScale;
-
-        var cacheRequest = new CacheRequest
-        {
-            TreeScope = TreeScope.Element,
-            TreeFilter = Automation.ControlViewCondition,
-            AutomationElementMode = AutomationElementMode.None
-        };
-        cacheRequest.Add(AutomationElement.ClassNameProperty);
-        cacheRequest.Add(AutomationElement.AutomationIdProperty);
-        cacheRequest.Add(AutomationElement.NameProperty);
-        cacheRequest.Add(AutomationElement.BoundingRectangleProperty);
-        cacheRequest.Add(AutomationElement.IsOffscreenProperty);
-
-        var taskbarEl = AutomationElement.FromHandle(taskbar);
-        if (taskbarEl == null) return false;
-
-        AutomationElementCollection elements;
-        using (cacheRequest.Activate())
-        {
-            elements = taskbarEl.FindAll(TreeScope.Descendants, UiaTrayQueryCondition);
-        }
-
-        bool foundAny = false;
-        TrayAnchorPx best = default;
-
-        for (int i = 0; i < elements.Count; i++)
-        {
-            try
-            {
-                var cached = elements[i].Cached;
-                if (cached.IsOffscreen) continue;
-
-                Rect rect = cached.BoundingRectangle;
-                if (rect.IsEmpty || rect.Width < minLeafSizePx || rect.Height < minLeafSizePx || rect.Width > maxLeafWidthPx)
-                    continue;
-
-                if (rect.Bottom < taskbarRect.Top - 6 || rect.Top > taskbarRect.Bottom + 6)
-                    continue;
-
-                if (rect.Left < minValidLeft || rect.Right > taskbarRect.Right + 8)
-                    continue;
-
-                string cls = cached.ClassName ?? string.Empty;
-                string aid = cached.AutomationId ?? string.Empty;
-                string name = cached.Name ?? string.Empty;
-
-                if (!IsSystemTrayLeafItem(cls, aid, name, out bool isChevron))
-                    continue;
-
-                // 若两个元素左边界几乎重合（如外层 Button 与内层 ChevronIconView），优先保留标记为 Chevron 或尺寸更标准的控件
-                if (!foundAny
-                    || rect.Left < best.LeftPx - 0.5
-                    || (Math.Abs(rect.Left - best.LeftPx) <= 0.5 && isChevron && !best.IsChevron))
-                {
-                    best = new TrayAnchorPx(rect.Left, rect.Width, isChevron, IsUiaLeaf: true);
-                    foundAny = true;
-                }
-            }
-            catch
-            {
-                // 跳过遍历期间瞬间消失的托盘图标
-            }
-        }
-
-        if (foundAny && best.LeftPx < taskbarRect.Right)
-        {
-            anchor = best;
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsSystemTrayLeafItem(string cls, string aid, string name, out bool isChevron)
-    {
-        isChevron = false;
-
-        // 1. 排除任何包含隐形布局边距的容器类（Stack / Frame / Container / Panel / Grid）
-        if (cls.Contains("Stack", StringComparison.OrdinalIgnoreCase)
-            || cls.Contains("Frame", StringComparison.OrdinalIgnoreCase)
-            || cls.Contains("Container", StringComparison.OrdinalIgnoreCase)
-            || cls.Contains("Panel", StringComparison.OrdinalIgnoreCase)
-            || cls.Contains("Grid", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        // 2. Windows 11 向上展开箭头（Chevron）精准识别
-        if (cls.Equals("SystemTray.ChevronIconView", StringComparison.OrdinalIgnoreCase)
-            || aid.Contains("Chevron", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("隐藏的图标", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("Show hidden icons", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("Notification Chevron", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("溢出", StringComparison.OrdinalIgnoreCase))
-        {
-            isChevron = true;
-            return true;
-        }
-
-        // 3. Windows 11 XAML 真实托盘叶子按钮/图标
-        if (cls.StartsWith("SystemTray.", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        // 4. 通用托盘叶子 AutomationId（SystemTrayIcon / NotifyItemIcon / InputIndicator）
-        if (aid.Equals("SystemTrayIcon", StringComparison.OrdinalIgnoreCase)
-            || aid.Equals("NotifyItemIcon", StringComparison.OrdinalIgnoreCase)
-            || aid.Contains("TrayIcon", StringComparison.OrdinalIgnoreCase)
-            || aid.Contains("InputIndicator", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     /// <summary>
@@ -710,36 +570,41 @@ public static class TaskbarLocator
     }
 
     /// <summary>
-    /// 将不同 Windows 11 版本 / 触控密度 / DPI 下宽度各异（24~40 DIP）的 ^ 展开按钮或托盘图标，
-    /// 归一化为统一的“胶囊右缘到可见符号（^）的光学间距”，同时严格保护按钮自身的悬停热区不重叠。
+    /// 将不同 Windows 11 版本 / 触屏模式 / 紧凑模式下宽度各异（16~80 DIP）的 ^ 展开按钮或托盘图标，
+    /// 归一化为统一的“胶囊右缘到可见符号（^）的光学间距”；在触屏膨胀按钮下自动收敛外侧空白，确保多设备观感完全一致。
     /// </summary>
     private static double ComputeNormalizedPillRightPx(TrayAnchorPx anchor, double offsetDip, double scale)
     {
         double widthDip = anchor.WidthPx / scale;
 
-        if (anchor.IsChevron && widthDip is >= 16.0 and <= 56.0)
+        if (anchor.IsChevron && widthDip is >= 16.0 and <= 80.0)
         {
             // ^ 符号自身宽约 12 DIP 且居中于按钮内；标准 32 DIP 按钮左侧内边距 = (32 - 12)/2 = 10 DIP
             double glyphLeftPx = anchor.LeftPx + (anchor.WidthPx / 2.0) - (6.0 * scale);
             double desiredGlyphGapPx = (offsetDip + 10.0) * scale;
             double byGlyphPx = glyphLeftPx - desiredGlyphGapPx;
 
-            // 热区安全保护：即便遇到 40+ DIP 超宽触控按钮，胶囊右缘也至少远离按钮热区边界 minHitboxGapDip
-            double minHitboxGapPx = Math.Max(6.0, offsetDip - 4.0) * scale;
-            double maxByHitboxPx = anchor.LeftPx - minHitboxGapPx;
+            // 触屏膨胀按钮（>= 40 DIP）自身左侧已带 14~34 DIP 透明触控留白，允许紧邻热区外缘（>= 1 DIP）以彻底消除巨大空隙；
+            // 普通桌面按钮（<= 36 DIP）保留安全热区留白
+            double minHitboxGapDip = widthDip >= 40.0
+                ? Math.Min(offsetDip, 1.0)
+                : Math.Min(offsetDip, Math.Max(4.0, offsetDip - 4.0));
+            double maxByHitboxPx = anchor.LeftPx - (minHitboxGapDip * scale);
 
             return Math.Min(byGlyphPx, maxByHitboxPx);
         }
 
-        if (anchor.IsUiaLeaf && widthDip is >= 16.0 and <= 56.0)
+        if (anchor.IsUiaLeaf && widthDip is >= 16.0 and <= 80.0)
         {
             // 无展开箭头时，最左为可见托盘图标（符号宽约 16 DIP 居中，标准 32 DIP 左侧内边距 = 8 DIP）
             double glyphLeftPx = anchor.LeftPx + (anchor.WidthPx / 2.0) - (8.0 * scale);
             double desiredGlyphGapPx = (offsetDip + 8.0) * scale;
             double byGlyphPx = glyphLeftPx - desiredGlyphGapPx;
 
-            double minHitboxGapPx = Math.Max(6.0, offsetDip - 4.0) * scale;
-            double maxByHitboxPx = anchor.LeftPx - minHitboxGapPx;
+            double minHitboxGapDip = widthDip >= 40.0
+                ? Math.Min(offsetDip, 1.0)
+                : Math.Min(offsetDip, Math.Max(4.0, offsetDip - 4.0));
+            double maxByHitboxPx = anchor.LeftPx - (minHitboxGapDip * scale);
 
             return Math.Min(byGlyphPx, maxByHitboxPx);
         }
