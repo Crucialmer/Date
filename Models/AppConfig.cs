@@ -7,6 +7,11 @@ namespace Date.Models;
 
 public class AppConfig
 {
+    private const int LatestConfigVersion = 2;
+
+    // 默认 0 以便反序列化不含此字段的旧版 config.json 时准确触发一次性迁移
+    public int ConfigVersion { get; set; } = 0;
+
     public string DateFormat { get; set; } = "yyyy年M月d日";
     public string DayOfWeekFormat { get; set; } = "dddd";
 
@@ -17,7 +22,7 @@ public class AppConfig
     // "Auto", "Dark", "Light"
     public string ThemeMode { get; set; } = "Auto";
 
-    // 距离托盘区域（含向上展开箭头 ^）左侧的像素间距
+    // 距离托盘区域（向上展开箭头 ^）左侧的逻辑间距（DIP，跨分辨率与跨缩放比自动等比统一）
     public int OffsetLeft { get; set; } = 12;
 
     // 是否启动时自动检查更新
@@ -48,7 +53,8 @@ public class AppConfig
                 var config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions);
                 if (config != null)
                 {
-                    config.Sanitize();
+                    bool migrated = config.SanitizeAndMigrate();
+                    if (migrated) config.Save();
                     return config;
                 }
             }
@@ -58,24 +64,46 @@ public class AppConfig
             // 读取异常时回退到默认设置
         }
 
-        var defaultConfig = new AppConfig();
+        var defaultConfig = new AppConfig { ConfigVersion = LatestConfigVersion };
         defaultConfig.Save();
         return defaultConfig;
     }
 
-    private void Sanitize()
+    private bool SanitizeAndMigrate()
     {
-        if (string.IsNullOrWhiteSpace(DateFormat)) DateFormat = "yyyy年M月d日";
-        if (string.IsNullOrWhiteSpace(DayOfWeekFormat)) DayOfWeekFormat = "dddd";
-        if (string.IsNullOrWhiteSpace(TimeFormat)) TimeFormat = "HH:mm";
-        if (string.IsNullOrWhiteSpace(GitHubRepo)) GitHubRepo = "Crucialmer/Date";
+        bool changed = false;
+
+        if (string.IsNullOrWhiteSpace(DateFormat)) { DateFormat = "yyyy年M月d日"; changed = true; }
+        if (string.IsNullOrWhiteSpace(DayOfWeekFormat)) { DayOfWeekFormat = "dddd"; changed = true; }
+        if (string.IsNullOrWhiteSpace(TimeFormat)) { TimeFormat = "HH:mm"; changed = true; }
+        if (string.IsNullOrWhiteSpace(GitHubRepo)) { GitHubRepo = "Crucialmer/Date"; changed = true; }
 
         if (!ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase) &&
             !ThemeMode.Equals("Dark", StringComparison.OrdinalIgnoreCase) &&
             !ThemeMode.Equals("Light", StringComparison.OrdinalIgnoreCase))
         {
             ThemeMode = "Auto";
+            changed = true;
         }
+
+        // 将旧版未手动改动过的默认 OffsetLeft=8 一次性平滑迁移至 12 DIP，保证多台已安装设备观感完全一致
+        if (ConfigVersion < LatestConfigVersion)
+        {
+            if (OffsetLeft == 8)
+            {
+                OffsetLeft = 12;
+            }
+            ConfigVersion = LatestConfigVersion;
+            changed = true;
+        }
+
+        if (OffsetLeft < 0 || OffsetLeft > 200)
+        {
+            OffsetLeft = 12;
+            changed = true;
+        }
+
+        return changed;
     }
 
     public void Save()

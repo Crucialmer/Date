@@ -753,19 +753,16 @@ public partial class MainWindow : Window
 
         try
         {
-            // 先依据任务栏高度应用标准/紧凑排版，再以最新 ActualWidth/ActualHeight 精确计算坐标
+            // 先依据任务栏高度应用标准/紧凑排版，再在统一物理像素空间精确测量胶囊本体并原子定位
             double taskbarHeight = TaskbarLocator.GetTaskbarHeightDip(this);
             ApplyTaskbarDensity(taskbarHeight < 40);
 
-            var pos = TaskbarLocator.CalculatePosition(this, _config.OffsetLeft, PillContainer.Margin.Right);
-            if (pos.HasValue)
+            var result = TaskbarLocator.CalculateAndApplyPosition(this, PillContainer, _config.OffsetLeft, allowMove: true);
+            if (result.HasValue)
             {
-                if (Math.Abs(Left - pos.Value.X) > 0.5) Left = pos.Value.X;
-                if (Math.Abs(Top - pos.Value.Y) > 0.5) Top = pos.Value.Y;
-
                 if (!_isStartingUp)
                 {
-                    if (pos.Value.IsTaskbarAutoHidden)
+                    if (result.Value.IsTaskbarAutoHidden)
                     {
                         if (Opacity > 0.0) Opacity = 0.0;
                     }

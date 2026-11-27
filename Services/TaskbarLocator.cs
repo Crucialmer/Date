@@ -127,17 +127,28 @@ public static class TaskbarLocator
         public uint flags;
     }
 
-    // 缓存最后一次有效托盘与任务栏坐标，防止系统重绘时的瞬间塌陷与坐标突跳
-    private static double _lastKnownGoodTrayLeftDip = -1;
-    private static double _lastKnownGoodTaskbarLeftDip;
-    private static double _lastKnownGoodTaskbarRightDip = -1;
-    private static double _lastKnownGoodTaskbarTopDip = -1;
-    private static double _lastKnownGoodTaskbarHeightDip = 48;
+    public readonly record struct PlacementResult(
+        int WindowLeftPx,
+        int WindowTopPx,
+        double TaskbarHeightDip,
+        bool IsTaskbarAutoHidden);
 
-    // Windows 11 XAML 托盘（含向上展开箭头 ChevronIconView 与 NotifyIconView）真实物理左边界缓存
+    private readonly record struct TrayAnchorPx(
+        double LeftPx,
+        double WidthPx,
+        bool IsChevron,
+        bool IsUiaLeaf);
+
+    // 缓存最后一次有效任务栏物理几何，防止 Explorer 重绘瞬间塌陷
+    private static bool _hasLastGoodTaskbar;
+    private static RECT _lastGoodTaskbarRect;
+    private static double _lastGoodTaskbarScale = 1.0;
+    private static double _lastGoodTaskbarHeightDip = 48.0;
+    private static TrayAnchorPx? _lastGoodAnchor;
+
+    // Windows 11 XAML 托盘最左真实按钮（向上展开箭头 ^ 或最左可见图标）物理像素缓存
     private static readonly object UiaCacheLock = new();
-    private static double _uiaTrayLeftPx = double.NaN;
-    private static bool _uiaFoundChevron;
+    private static TrayAnchorPx? _uiaAnchor;
     private static long _uiaLastUpdatedTick;
     private static int _uiaProbeInFlight;
 
@@ -156,23 +167,22 @@ public static class TaskbarLocator
     /// </summary>
     public static void ResetCache()
     {
-        _lastKnownGoodTrayLeftDip = -1;
-        _lastKnownGoodTaskbarLeftDip = 0;
-        _lastKnownGoodTaskbarRightDip = -1;
-        _lastKnownGoodTaskbarTopDip = -1;
-        _lastKnownGoodTaskbarHeightDip = 48;
+        _hasLastGoodTaskbar = false;
+        _lastGoodTaskbarRect = default;
+        _lastGoodTaskbarScale = 1.0;
+        _lastGoodTaskbarHeightDip = 48.0;
+        _lastGoodAnchor = null;
 
         lock (UiaCacheLock)
         {
-            _uiaTrayLeftPx = double.NaN;
-            _uiaFoundChevron = false;
+            _uiaAnchor = null;
             _uiaLastUpdatedTick = 0;
         }
     }
 
     /// <summary>
-    /// 在后台线程通过 UI Automation 批量缓存扫描 Windows 11 XAML 托盘真实最左边界（精确涵盖向上展开箭头 ^ 与全部可见托盘图标）。
-    /// 使用单飞防重入与 AutomationElementMode.None，绝不阻塞 WPF UI 线程、不持有跨进程 COM 句柄。
+    /// 在后台线程通过 UI Automation 批量缓存扫描 Windows 11 XAML 托盘最左侧真实叶子按钮（精确涵盖向上展开箭头 ^ 与全部可见托盘图标）。
+    /// 彻底排除 SystemTray.Stack / Frame 等含透明留白的布局容器，确保跨设备坐标完全一致。
     /// </summary>
     public static void TriggerAsyncTrayBoundaryProbe(Action onBoundaryChanged)
     {
@@ -183,14 +193,16 @@ public static class TaskbarLocator
         {
             try
             {
-                if (TryProbeXamlTrayLeftPx(out double probedLeftPx, out bool foundChevron))
+                if (TryProbeXamlTrayAnchorPx(out TrayAnchorPx probed))
                 {
                     bool changed;
                     lock (UiaCacheLock)
                     {
-                        changed = double.IsNaN(_uiaTrayLeftPx) || Math.Abs(_uiaTrayLeftPx - probedLeftPx) >= 1.0;
-                        _uiaTrayLeftPx = probedLeftPx;
-                        _uiaFoundChevron = foundChevron;
+                        changed = !_uiaAnchor.HasValue
+                                  || Math.Abs(_uiaAnchor.Value.LeftPx - probed.LeftPx) >= 0.8
+                                  || Math.Abs(_uiaAnchor.Value.WidthPx - probed.WidthPx) >= 0.8
+                                  || _uiaAnchor.Value.IsChevron != probed.IsChevron;
+                        _uiaAnchor = probed;
                         _uiaLastUpdatedTick = Environment.TickCount64;
                     }
 
@@ -211,10 +223,9 @@ public static class TaskbarLocator
         });
     }
 
-    private static bool TryProbeXamlTrayLeftPx(out double minLeftPx, out bool foundChevron)
+    private static bool TryProbeXamlTrayAnchorPx(out TrayAnchorPx anchor)
     {
-        minLeftPx = double.MaxValue;
-        foundChevron = false;
+        anchor = default;
 
         IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
         if (taskbar == IntPtr.Zero || !GetWindowRect(taskbar, out RECT taskbarRect))
@@ -223,9 +234,12 @@ public static class TaskbarLocator
         int taskbarWidth = taskbarRect.Right - taskbarRect.Left;
         if (taskbarWidth <= 200) return false;
 
-        // 仅接受位于任务栏右侧合理区域的托盘项，绝不误匹配左侧开始菜单/搜索/居中应用图标
+        double dpiScale = GetTaskbarDpiScale(taskbar);
+
+        // 仅接受位于任务栏右侧合理区域的真实叶子托盘按钮（过滤整栏或托盘栈级宽容器）
         double minValidLeft = taskbarRect.Left + taskbarWidth * 0.35;
-        double maxItemWidth = taskbarWidth * 0.40;
+        double maxLeafWidthPx = Math.Min(taskbarWidth * 0.25, 180.0 * dpiScale);
+        double minLeafSizePx = 8.0 * dpiScale;
 
         var cacheRequest = new CacheRequest
         {
@@ -249,17 +263,17 @@ public static class TaskbarLocator
         }
 
         bool foundAny = false;
+        TrayAnchorPx best = default;
+
         for (int i = 0; i < elements.Count; i++)
         {
             try
             {
-                var el = elements[i];
-                var cached = el.Cached;
-
+                var cached = elements[i].Cached;
                 if (cached.IsOffscreen) continue;
 
                 Rect rect = cached.BoundingRectangle;
-                if (rect.IsEmpty || rect.Width < 6 || rect.Height < 6 || rect.Width > maxItemWidth)
+                if (rect.IsEmpty || rect.Width < minLeafSizePx || rect.Height < minLeafSizePx || rect.Width > maxLeafWidthPx)
                     continue;
 
                 if (rect.Bottom < taskbarRect.Top - 6 || rect.Top > taskbarRect.Bottom + 6)
@@ -272,14 +286,15 @@ public static class TaskbarLocator
                 string aid = cached.AutomationId ?? string.Empty;
                 string name = cached.Name ?? string.Empty;
 
-                if (!IsSystemTrayItem(cls, aid, name, out bool isChevron))
+                if (!IsSystemTrayLeafItem(cls, aid, name, out bool isChevron))
                     continue;
 
-                if (isChevron) foundChevron = true;
-
-                if (rect.Left < minLeftPx)
+                // 若两个元素左边界几乎重合（如外层 Button 与内层 ChevronIconView），优先保留标记为 Chevron 或尺寸更标准的控件
+                if (!foundAny
+                    || rect.Left < best.LeftPx - 0.5
+                    || (Math.Abs(rect.Left - best.LeftPx) <= 0.5 && isChevron && !best.IsChevron))
                 {
-                    minLeftPx = rect.Left;
+                    best = new TrayAnchorPx(rect.Left, rect.Width, isChevron, IsUiaLeaf: true);
                     foundAny = true;
                 }
             }
@@ -289,14 +304,30 @@ public static class TaskbarLocator
             }
         }
 
-        return foundAny && minLeftPx < taskbarRect.Right;
+        if (foundAny && best.LeftPx < taskbarRect.Right)
+        {
+            anchor = best;
+            return true;
+        }
+
+        return false;
     }
 
-    private static bool IsSystemTrayItem(string cls, string aid, string name, out bool isChevron)
+    private static bool IsSystemTrayLeafItem(string cls, string aid, string name, out bool isChevron)
     {
         isChevron = false;
 
-        // 1. Windows 11 向上展开箭头（Chevron）精准识别
+        // 1. 排除任何包含隐形布局边距的容器类（Stack / Frame / Container / Panel / Grid）
+        if (cls.Contains("Stack", StringComparison.OrdinalIgnoreCase)
+            || cls.Contains("Frame", StringComparison.OrdinalIgnoreCase)
+            || cls.Contains("Container", StringComparison.OrdinalIgnoreCase)
+            || cls.Contains("Panel", StringComparison.OrdinalIgnoreCase)
+            || cls.Contains("Grid", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // 2. Windows 11 向上展开箭头（Chevron）精准识别
         if (cls.Equals("SystemTray.ChevronIconView", StringComparison.OrdinalIgnoreCase)
             || aid.Contains("Chevron", StringComparison.OrdinalIgnoreCase)
             || name.Contains("隐藏的图标", StringComparison.OrdinalIgnoreCase)
@@ -308,18 +339,13 @@ public static class TaskbarLocator
             return true;
         }
 
-        // 2. Windows 11 XAML 托盘子项（剔除整栏级宽容器，仅保留真实可见托盘按钮/图标）
+        // 3. Windows 11 XAML 真实托盘叶子按钮/图标
         if (cls.StartsWith("SystemTray.", StringComparison.OrdinalIgnoreCase))
         {
-            if (cls.Contains("Frame", StringComparison.OrdinalIgnoreCase)
-                || cls.Contains("Container", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
             return true;
         }
 
-        // 3. 通用托盘 AutomationId（SystemTrayIcon / NotifyItemIcon / InputIndicator / Clock 等）
+        // 4. 通用托盘叶子 AutomationId（SystemTrayIcon / NotifyItemIcon / InputIndicator）
         if (aid.Equals("SystemTrayIcon", StringComparison.OrdinalIgnoreCase)
             || aid.Equals("NotifyItemIcon", StringComparison.OrdinalIgnoreCase)
             || aid.Contains("TrayIcon", StringComparison.OrdinalIgnoreCase)
@@ -332,11 +358,11 @@ public static class TaskbarLocator
     }
 
     /// <summary>
-    /// 结合 Win32 TrayNotifyWnd 及其所有可见子窗口（含经典 Button 折叠箭头）获取 Win32 层最左物理像素
+    /// 兜底方案（仅在 UIA 不可用时使用）：结合 Win32 TrayNotifyWnd 及可见子 Button 获取最左物理像素
     /// </summary>
-    private static bool TryGetWin32TrayLeftPx(IntPtr taskbar, RECT taskbarRect, out double leftPx)
+    private static bool TryGetWin32TrayAnchorPx(IntPtr taskbar, RECT taskbarRect, out TrayAnchorPx anchor)
     {
-        leftPx = double.MaxValue;
+        anchor = default;
         if (taskbar == IntPtr.Zero) return false;
 
         IntPtr tray = FindWindowEx(taskbar, IntPtr.Zero, "TrayNotifyWnd", null);
@@ -346,36 +372,53 @@ public static class TaskbarLocator
         int taskbarWidth = taskbarRect.Right - taskbarRect.Left;
         double minValidLeft = taskbarRect.Left + taskbarWidth * 0.35;
 
+        // 优先查找经典独立 Chevron Button 子窗口，避免 TrayNotifyWnd 左侧隐形边距干扰
+        IntPtr chevronBtn = FindWindowEx(tray, IntPtr.Zero, "Button", null);
+        if (chevronBtn != IntPtr.Zero && IsWindowVisible(chevronBtn) && GetWindowRect(chevronBtn, out RECT btnRect))
+        {
+            int bw = btnRect.Right - btnRect.Left;
+            int bh = btnRect.Bottom - btnRect.Top;
+            if (bw >= 8 && bh >= 8 && btnRect.Left >= minValidLeft && btnRect.Right <= taskbarRect.Right + 4)
+            {
+                anchor = new TrayAnchorPx(btnRect.Left, bw, IsChevron: true, IsUiaLeaf: false);
+                return true;
+            }
+        }
+
         bool found = false;
+        double bestLeft = double.MaxValue;
+        double bestWidth = 0;
+
         if (trayRect.Left >= minValidLeft && trayRect.Left < taskbarRect.Right && (trayRect.Right - trayRect.Left) > 10)
         {
-            leftPx = trayRect.Left;
+            bestLeft = trayRect.Left;
+            bestWidth = trayRect.Right - trayRect.Left;
             found = true;
         }
 
-        // 同时枚举 TrayNotifyWnd 的可见子窗口（如独立 Button 箭头），防止子控件向左超出父窗口边界
-        double childMinLeft = leftPx;
         EnumChildWindows(tray, (child, _) =>
         {
             if (IsWindowVisible(child) && GetWindowRect(child, out RECT cr))
             {
                 int cw = cr.Right - cr.Left;
                 int ch = cr.Bottom - cr.Top;
-                if (cw >= 8 && ch >= 8 && cr.Left >= minValidLeft && cr.Left < childMinLeft && cr.Right <= taskbarRect.Right + 4)
+                if (cw >= 8 && ch >= 8 && cr.Left >= minValidLeft && cr.Left < bestLeft && cr.Right <= taskbarRect.Right + 4)
                 {
-                    childMinLeft = cr.Left;
+                    bestLeft = cr.Left;
+                    bestWidth = cw;
+                    found = true;
                 }
             }
             return true;
         }, IntPtr.Zero);
 
-        if (childMinLeft < double.MaxValue)
+        if (found)
         {
-            leftPx = childMinLeft;
-            found = true;
+            anchor = new TrayAnchorPx(bestLeft, bestWidth, IsChevron: false, IsUiaLeaf: false);
+            return true;
         }
 
-        return found;
+        return false;
     }
 
     /// <summary>
@@ -464,10 +507,7 @@ public static class TaskbarLocator
         catch { }
     }
 
-    /// <summary>
-    /// 获取任务栏所在显示器的精确 DPI 缩放比（支持多屏混合 DPI，回退至 WPF PresentationSource）
-    /// </summary>
-    private static (double DpiX, double DpiY) GetEffectiveTaskbarDpi(Window window, IntPtr taskbar)
+    private static double GetTaskbarDpiScale(IntPtr taskbar)
     {
         try
         {
@@ -475,18 +515,23 @@ public static class TaskbarLocator
             {
                 uint dpi = GetDpiForWindow(taskbar);
                 if (dpi >= 96 && dpi <= 960)
-                {
-                    double scale = dpi / 96.0;
-                    return (scale, scale);
-                }
+                    return dpi / 96.0;
             }
         }
         catch { }
 
+        return _lastGoodTaskbarScale > 0 ? _lastGoodTaskbarScale : 1.0;
+    }
+
+    private static (double DpiX, double DpiY) GetWindowDpiScale(Window window, double fallbackScale)
+    {
         var source = PresentationSource.FromVisual(window);
-        double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
-        double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
-        return (dpiX, dpiY);
+        if (source?.CompositionTarget != null)
+        {
+            return (source.CompositionTarget.TransformToDevice.M11,
+                    source.CompositionTarget.TransformToDevice.M22);
+        }
+        return (fallbackScale, fallbackScale);
     }
 
     /// <summary>
@@ -506,7 +551,6 @@ public static class TaskbarLocator
             var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
             if (!GetMonitorInfo(monitor, ref mi)) return false;
 
-            // 底部任务栏收起时其 Top 贴近或超出显示器底边；顶部任务栏收起时其 Bottom 贴近顶边
             return taskbarRect.Top >= mi.rcMonitor.Bottom - 6
                 || taskbarRect.Bottom <= mi.rcMonitor.Top + 6;
         }
@@ -526,25 +570,28 @@ public static class TaskbarLocator
             IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
             if (taskbar != IntPtr.Zero && GetWindowRect(taskbar, out RECT rect) && (rect.Right - rect.Left) > 100)
             {
-                var (_, dpiY) = GetEffectiveTaskbarDpi(window, taskbar);
-                double heightDip = (rect.Bottom - rect.Top) / dpiY;
-                _lastKnownGoodTaskbarHeightDip = heightDip;
+                double scale = GetTaskbarDpiScale(taskbar);
+                double heightDip = (rect.Bottom - rect.Top) / scale;
+                _lastGoodTaskbarHeightDip = heightDip;
                 return heightDip;
             }
         }
         catch { }
 
-        return _lastKnownGoodTaskbarHeightDip;
+        return _lastGoodTaskbarHeightDip;
     }
 
     /// <summary>
-    /// 双层融合（Windows 11 XAML UIA 真实托盘/展开箭头 + Win32 TrayNotifyWnd）精确计算悬浮胶囊位置。
-    /// 始终以最靠左的真实托盘边界为准，扣除 Win11 顶部 1px 分隔线实现光学上下居中，并感知任务栏自动隐藏状态。
+    /// 全物理像素坐标空间精确计算并定位悬浮胶囊：
+    /// 1) 优先直接锚定 UIA 真实 XAML 托盘叶子按钮（^ 展开箭头或最左可见图标），不受 Win32 TrayNotifyWnd 跨设备隐形留白干扰；
+    /// 2) 对不同 Windows 11 版本/触控模式的 ^ 按钮宽度（24/32/40 DIP）按居中字形做光学归一化，实现多设备视觉间距完全一致；
+    /// 3) 直接使用视觉胶囊本体在窗口内的精确物理偏移 + Win32 SetWindowPos 定位，消除跨 DPI/分数缩放往返换算误差。
     /// </summary>
-    public static (double X, double Y, double TaskbarHeight, bool IsTaskbarAutoHidden)? CalculatePosition(
+    public static PlacementResult? CalculateAndApplyPosition(
         Window window,
-        int offsetLeft,
-        double visualRightMarginDip = 0)
+        FrameworkElement visualPill,
+        int offsetLeftDip,
+        bool allowMove)
     {
         try
         {
@@ -552,102 +599,151 @@ public static class TaskbarLocator
             if (hwnd == IntPtr.Zero) return null;
 
             IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
-            var (dpiX, dpiY) = GetEffectiveTaskbarDpi(window, taskbar);
             RECT taskbarRect = default;
             bool hasTaskbar = taskbar != IntPtr.Zero
                               && GetWindowRect(taskbar, out taskbarRect)
                               && (taskbarRect.Right - taskbarRect.Left) > 100;
 
-            bool isAutoHidden = hasTaskbar && IsTaskbarCurrentlyAutoHidden(taskbar, taskbarRect);
-            double taskbarLeftDip, taskbarRightDip, taskbarTopDip, taskbarHeightDip;
-
+            double taskbarScale;
             if (hasTaskbar)
             {
-                taskbarLeftDip = taskbarRect.Left / dpiX;
-                taskbarRightDip = taskbarRect.Right / dpiX;
-                taskbarTopDip = taskbarRect.Top / dpiY;
-                taskbarHeightDip = (taskbarRect.Bottom - taskbarRect.Top) / dpiY;
-
-                _lastKnownGoodTaskbarLeftDip = taskbarLeftDip;
-                _lastKnownGoodTaskbarRightDip = taskbarRightDip;
-                _lastKnownGoodTaskbarTopDip = taskbarTopDip;
-                _lastKnownGoodTaskbarHeightDip = taskbarHeightDip;
+                taskbarScale = GetTaskbarDpiScale(taskbar);
+                _hasLastGoodTaskbar = true;
+                _lastGoodTaskbarRect = taskbarRect;
+                _lastGoodTaskbarScale = taskbarScale;
+                _lastGoodTaskbarHeightDip = (taskbarRect.Bottom - taskbarRect.Top) / taskbarScale;
             }
-            else if (_lastKnownGoodTaskbarRightDip > 0)
+            else if (_hasLastGoodTaskbar)
             {
-                taskbarLeftDip = _lastKnownGoodTaskbarLeftDip;
-                taskbarRightDip = _lastKnownGoodTaskbarRightDip;
-                taskbarTopDip = _lastKnownGoodTaskbarTopDip;
-                taskbarHeightDip = _lastKnownGoodTaskbarHeightDip;
+                taskbarRect = _lastGoodTaskbarRect;
+                taskbarScale = _lastGoodTaskbarScale;
             }
             else
             {
-                double fallbackX = SystemParameters.WorkArea.Right - window.ActualWidth - 220 - offsetLeft + visualRightMarginDip;
-                double fallbackY = SystemParameters.WorkArea.Bottom
-                                   + (SystemParameters.PrimaryScreenHeight - SystemParameters.WorkArea.Bottom - window.ActualHeight) / 2.0;
-                return (fallbackX, fallbackY, 48, false);
+                return null;
             }
 
-            // 读取 Win32 托盘左边界
-            double win32TrayLeftPx = double.NaN;
-            bool hasWin32 = hasTaskbar && TryGetWin32TrayLeftPx(taskbar, taskbarRect, out win32TrayLeftPx);
+            bool isAutoHidden = hasTaskbar && IsTaskbarCurrentlyAutoHidden(taskbar, taskbarRect);
+            double taskbarHeightDip = (taskbarRect.Bottom - taskbarRect.Top) / taskbarScale;
+            bool isCompact = taskbarHeightDip < 40.0;
 
-            // 读取最新的 UIA XAML 托盘（含向上展开箭头 ^）左边界
-            double uiaTrayLeftPx;
-            bool uiaFresh;
-            bool uiaFoundChevron;
+            // 1. 选取最高精度托盘锚点：
+            //    优先使用 UIA 实测的 XAML 真实叶子按钮（^ 展开箭头 / 最左可见图标），彻底屏蔽 TrayNotifyWnd 跨设备不一致的隐形左侧留白；
+            //    仅当 UIA 尚未就绪或不可用（如 Win10 / Explorer 重启中）时回退至 Win32 锚点。
+            TrayAnchorPx? anchor = null;
             lock (UiaCacheLock)
             {
-                uiaTrayLeftPx = _uiaTrayLeftPx;
-                uiaFoundChevron = _uiaFoundChevron;
-                uiaFresh = !double.IsNaN(uiaTrayLeftPx) && (Environment.TickCount64 - _uiaLastUpdatedTick) < 10_000;
+                if (_uiaAnchor.HasValue && (Environment.TickCount64 - _uiaLastUpdatedTick) < 10_000)
+                {
+                    anchor = _uiaAnchor.Value;
+                }
             }
 
-            double trayLeftInDip;
-            if (uiaFresh && hasWin32)
+            if (!anchor.HasValue && hasTaskbar && TryGetWin32TrayAnchorPx(taskbar, taskbarRect, out TrayAnchorPx win32Anchor))
             {
-                double effectivePx = (uiaFoundChevron && (uiaTrayLeftPx - win32TrayLeftPx) > 120)
-                    ? uiaTrayLeftPx
-                    : Math.Min(uiaTrayLeftPx, win32TrayLeftPx);
+                anchor = win32Anchor;
+            }
 
-                trayLeftInDip = effectivePx / dpiX;
-                _lastKnownGoodTrayLeftDip = trayLeftInDip;
-            }
-            else if (uiaFresh)
+            if (anchor.HasValue)
             {
-                trayLeftInDip = uiaTrayLeftPx / dpiX;
-                _lastKnownGoodTrayLeftDip = trayLeftInDip;
+                _lastGoodAnchor = anchor.Value;
             }
-            else if (hasWin32)
+            else if (_lastGoodAnchor.HasValue)
             {
-                trayLeftInDip = win32TrayLeftPx / dpiX;
-                _lastKnownGoodTrayLeftDip = trayLeftInDip;
-            }
-            else if (_lastKnownGoodTrayLeftDip > 0)
-            {
-                trayLeftInDip = _lastKnownGoodTrayLeftDip;
+                anchor = _lastGoodAnchor.Value;
             }
             else
             {
-                trayLeftInDip = taskbarRightDip - 230;
+                anchor = new TrayAnchorPx(taskbarRect.Right - 230.0 * taskbarScale, 32.0 * taskbarScale, IsChevron: false, IsUiaLeaf: false);
             }
 
-            double windowWidth = window.ActualWidth > 0 ? window.ActualWidth : 180;
-            double windowHeight = window.ActualHeight > 0 ? window.ActualHeight : 36;
+            // 2. 光学字形距离归一化（跨设备/跨缩放/跨按钮宽度的核心一致化公式）：
+            //    标准 48 DIP 任务栏中，32 DIP 宽的 ^ 按钮内部左侧自带约 10 DIP 透明留白（字形宽 ~12 DIP 居中）；
+            //    紧凑小任务栏按 0.85 等比收缩间距保持比例统一。
+            double effectiveOffsetDip = isCompact ? offsetLeftDip * 0.85 : offsetLeftDip;
+            double targetVisualPillRightPx = ComputeNormalizedPillRightPx(anchor.Value, effectiveOffsetDip, taskbarScale);
 
-            // X 轴吸附（补偿右侧阴影留白，使可见胶囊右缘与最左托盘/向上箭头间距严格等于 offsetLeft）
-            double targetX = trayLeftInDip - windowWidth + visualRightMarginDip - offsetLeft;
-            targetX = Math.Max(taskbarLeftDip, Math.Min(targetX, taskbarRightDip - windowWidth - 4));
+            // 3. 精确测量可见胶囊本体 (PillContainer) 在 MainWindow 内的物理像素坐标
+            var (winDpiX, winDpiY) = GetWindowDpiScale(window, taskbarScale);
+            double pillWidthDip = visualPill.ActualWidth > 0 ? visualPill.ActualWidth : 230;
+            double pillHeightDip = visualPill.ActualHeight > 0 ? visualPill.ActualHeight : 32;
 
-            // Y 轴光学上下居中（扣除 Windows 11 任务栏顶部 1px 分隔线，与任务栏内腔视觉中心严格对齐）
-            double topBorderDip = taskbarHeightDip >= 30 ? (1.0 / dpiY) : 0.0;
-            double targetY = taskbarTopDip + topBorderDip + (taskbarHeightDip - topBorderDip - windowHeight) / 2.0;
+            System.Windows.Point pillTopLeftDip = visualPill.TranslatePoint(new System.Windows.Point(0, 0), window);
+            double pillRightOffsetPx = (pillTopLeftDip.X + pillWidthDip) * winDpiX;
+            double pillCenterYOffsetPx = (pillTopLeftDip.Y + pillHeightDip / 2.0) * winDpiY;
 
-            return (targetX, targetY, taskbarHeightDip, isAutoHidden);
+            // 4. 在统一物理屏幕像素空间计算窗口精确左上角
+            int targetWinLeftPx = (int)Math.Round(targetVisualPillRightPx - pillRightOffsetPx);
+
+            int winWidthPx = GetWindowRect(hwnd, out RECT currentRect) && (currentRect.Right - currentRect.Left) > 0
+                ? (currentRect.Right - currentRect.Left)
+                : (int)Math.Round((window.ActualWidth > 0 ? window.ActualWidth : 250) * winDpiX);
+
+            int minWinLeftPx = taskbarRect.Left;
+            int maxWinLeftPx = taskbarRect.Right - winWidthPx - (int)Math.Round(4.0 * taskbarScale);
+            targetWinLeftPx = Math.Clamp(targetWinLeftPx, minWinLeftPx, Math.Max(minWinLeftPx, maxWinLeftPx));
+
+            // 垂直光学居中：扣除 Windows 11 任务栏顶部 1 个物理像素分隔线，让胶囊本体光学中心与任务栏内腔中线严格重合
+            int taskbarInnerTopPx = taskbarRect.Top + (taskbarHeightDip >= 30.0 ? 1 : 0);
+            double taskbarCenterYPx = (taskbarInnerTopPx + taskbarRect.Bottom) / 2.0;
+            int targetWinTopPx = (int)Math.Round(taskbarCenterYPx - pillCenterYOffsetPx);
+
+            // 5. 直接通过 Win32 SetWindowPos 原子移动（零 WPF Left/Top 跨 DPI 往返换算误差）
+            if (allowMove)
+            {
+                bool needsMove = !GetWindowRect(hwnd, out RECT cur)
+                                 || Math.Abs(cur.Left - targetWinLeftPx) >= 1
+                                 || Math.Abs(cur.Top - targetWinTopPx) >= 1;
+                if (needsMove)
+                {
+                    SetWindowPos(hwnd, HWND_TOPMOST, targetWinLeftPx, targetWinTopPx, 0, 0,
+                        SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
+
+            return new PlacementResult(targetWinLeftPx, targetWinTopPx, taskbarHeightDip, isAutoHidden);
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// 将不同 Windows 11 版本 / 触控密度 / DPI 下宽度各异（24~40 DIP）的 ^ 展开按钮或托盘图标，
+    /// 归一化为统一的“胶囊右缘到可见符号（^）的光学间距”，同时严格保护按钮自身的悬停热区不重叠。
+    /// </summary>
+    private static double ComputeNormalizedPillRightPx(TrayAnchorPx anchor, double offsetDip, double scale)
+    {
+        double widthDip = anchor.WidthPx / scale;
+
+        if (anchor.IsChevron && widthDip is >= 16.0 and <= 56.0)
+        {
+            // ^ 符号自身宽约 12 DIP 且居中于按钮内；标准 32 DIP 按钮左侧内边距 = (32 - 12)/2 = 10 DIP
+            double glyphLeftPx = anchor.LeftPx + (anchor.WidthPx / 2.0) - (6.0 * scale);
+            double desiredGlyphGapPx = (offsetDip + 10.0) * scale;
+            double byGlyphPx = glyphLeftPx - desiredGlyphGapPx;
+
+            // 热区安全保护：即便遇到 40+ DIP 超宽触控按钮，胶囊右缘也至少远离按钮热区边界 minHitboxGapDip
+            double minHitboxGapPx = Math.Max(6.0, offsetDip - 4.0) * scale;
+            double maxByHitboxPx = anchor.LeftPx - minHitboxGapPx;
+
+            return Math.Min(byGlyphPx, maxByHitboxPx);
+        }
+
+        if (anchor.IsUiaLeaf && widthDip is >= 16.0 and <= 56.0)
+        {
+            // 无展开箭头时，最左为可见托盘图标（符号宽约 16 DIP 居中，标准 32 DIP 左侧内边距 = 8 DIP）
+            double glyphLeftPx = anchor.LeftPx + (anchor.WidthPx / 2.0) - (8.0 * scale);
+            double desiredGlyphGapPx = (offsetDip + 8.0) * scale;
+            double byGlyphPx = glyphLeftPx - desiredGlyphGapPx;
+
+            double minHitboxGapPx = Math.Max(6.0, offsetDip - 4.0) * scale;
+            double maxByHitboxPx = anchor.LeftPx - minHitboxGapPx;
+
+            return Math.Min(byGlyphPx, maxByHitboxPx);
+        }
+
+        return anchor.LeftPx - (offsetDip * scale);
     }
 }
