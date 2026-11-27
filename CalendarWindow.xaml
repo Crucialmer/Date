@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Date 日历"
-        Width="352"
+        Width="388"
         SizeToContent="Height"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -126,7 +126,7 @@
                     Margin="1,1,1,0"
                     IsHitTestVisible="False"/>
 
-            <StackPanel Margin="16,15,16,14">
+            <StackPanel Margin="18,16,18,15">
                 <!-- 1. 顶栏：年月主标题 + 干支生肖副标题 + 导航微胶囊组 -->
                 <Grid Margin="2,0,2,12">
                     <Grid.ColumnDefinitions>
@@ -210,7 +210,7 @@
                         Background="{DynamicResource CalFooterBgBrush}"
                         BorderBrush="{DynamicResource CalFooterBorderBrush}"
                         BorderThickness="1"
-                        Padding="12,9">
+                        Padding="13,10">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

@@ -363,9 +363,9 @@ public partial class CalendarWindow : Window
 
             var border = new Border
             {
-                Height = 44,
+                Height = 42,
                 Margin = new Thickness(2),
-                CornerRadius = new CornerRadius(11),
+                CornerRadius = new CornerRadius(11.5),
                 BorderThickness = new Thickness(1.2),
                 BorderBrush = TransparentBrush,
                 Background = TransparentBrush,
