@@ -86,7 +86,7 @@ public partial class CalendarWindow : Window
     static CalendarWindow()
     {
         PureWhiteBrush = FreezeBrush(MediaColor.FromRgb(0xFF, 0xFF, 0xFF));
-        TodaySubWhiteBrush = FreezeBrush(MediaColor.FromArgb(0xF2, 0xFF, 0xFF, 0xFF));
+        TodaySubWhiteBrush = FreezeBrush(MediaColor.FromRgb(0xFF, 0xFF, 0xFF));
         TransparentBrush = FreezeBrush(MediaColor.FromArgb(0x00, 0x00, 0x00, 0x00));
 
         // ── 深色 Obsidian Dual-Rim Liquid Glass ──
@@ -113,9 +113,9 @@ public partial class CalendarWindow : Window
             (MediaColor.FromRgb(0x1E, 0x90, 0xFF), 0.0),
             (MediaColor.FromRgb(0x0A, 0x7A, 0xF5), 1.0));
 
-        DarkFg = FreezeBrush(MediaColor.FromRgb(0xF5, 0xF5, 0xF7));
-        DarkSecondaryFg = FreezeBrush(MediaColor.FromArgb(0xCC, 0xEB, 0xEB, 0xF5));
-        DarkMutedFg = FreezeBrush(MediaColor.FromArgb(0xAE, 0xEB, 0xEB, 0xF5));
+        DarkFg = FreezeBrush(MediaColor.FromRgb(0xFF, 0xFF, 0xFF));
+        DarkSecondaryFg = FreezeBrush(MediaColor.FromRgb(0xF0, 0xF0, 0xF6));
+        DarkMutedFg = FreezeBrush(MediaColor.FromArgb(0xEC, 0xF0, 0xF0, 0xF6));
         DarkWeekendFg = FreezeBrush(MediaColor.FromArgb(0xC8, 0xFF, 0x9B, 0x94));
         DarkAccent = FreezeBrush(MediaColor.FromRgb(0x0A, 0x84, 0xFF));
         DarkFestival = FreezeBrush(MediaColor.FromRgb(0xFF, 0x69, 0x61));
@@ -156,9 +156,9 @@ public partial class CalendarWindow : Window
             (MediaColor.FromRgb(0x14, 0x86, 0xFF), 0.0),
             (MediaColor.FromRgb(0x00, 0x70, 0xF0), 1.0));
 
-        LightFg = FreezeBrush(MediaColor.FromRgb(0x14, 0x14, 0x18));
-        LightSecondaryFg = FreezeBrush(MediaColor.FromArgb(0xD6, 0x2C, 0x2C, 0x32));
-        LightMutedFg = FreezeBrush(MediaColor.FromArgb(0xB8, 0x3C, 0x3C, 0x43));
+        LightFg = FreezeBrush(MediaColor.FromRgb(0x11, 0x11, 0x15));
+        LightSecondaryFg = FreezeBrush(MediaColor.FromRgb(0x1F, 0x1F, 0x24));
+        LightMutedFg = FreezeBrush(MediaColor.FromRgb(0x2C, 0x2C, 0x32));
         LightWeekendFg = FreezeBrush(MediaColor.FromArgb(0xC8, 0xD9, 0x38, 0x2E));
         LightAccent = FreezeBrush(MediaColor.FromRgb(0x00, 0x7A, 0xFF));
         LightFestival = FreezeBrush(MediaColor.FromRgb(0xE0, 0x31, 0x26));
@@ -325,7 +325,7 @@ public partial class CalendarWindow : Window
             var dayNum = new TextBlock
             {
                 FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Display, -apple-system, PingFang SC, Microsoft YaHei UI"),
-                FontSize = 13.5,
+                FontSize = 14.0,
                 FontWeight = FontWeights.SemiBold,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                 TextAlignment = TextAlignment.Center
@@ -335,7 +335,7 @@ public partial class CalendarWindow : Window
             var subText = new TextBlock
             {
                 FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, -apple-system, PingFang SC, Microsoft YaHei UI"),
-                FontSize = 10.0,
+                FontSize = 10.5,
                 Margin = new Thickness(0, 1, 0, 0),
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
@@ -491,7 +491,7 @@ public partial class CalendarWindow : Window
 
         cell.DayNumber.Text = cell.Date.Day.ToString();
         cell.SubText.Text = info.SubLabel;
-        cell.Root.Opacity = cell.IsCurrentMonth ? 1.0 : 0.38;
+        cell.Root.Opacity = cell.IsCurrentMonth ? 1.0 : 0.45;
 
         MediaBrush fg = _isDarkMode ? DarkFg : LightFg;
         MediaBrush muted = _isDarkMode ? DarkMutedFg : LightMutedFg;

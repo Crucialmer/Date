@@ -25,9 +25,9 @@
             SnapsToDevicePixels="True">
         <Border.Resources>
             <!-- 动态主题笔刷（默认深色，由 ApplyTheme 冻结并实时同步） -->
-            <SolidColorBrush x:Key="CalFgBrush" Color="#FFF5F5F7"/>
-            <SolidColorBrush x:Key="CalSecondaryFgBrush" Color="#CCEBEBF5"/>
-            <SolidColorBrush x:Key="CalMutedFgBrush" Color="#AEEBEBF5"/>
+            <SolidColorBrush x:Key="CalFgBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="CalSecondaryFgBrush" Color="#FFF0F0F6"/>
+            <SolidColorBrush x:Key="CalMutedFgBrush" Color="#ECF0F0F6"/>
             <SolidColorBrush x:Key="CalWeekendFgBrush" Color="#C8FF9B94"/>
             <SolidColorBrush x:Key="CalAccentBrush" Color="#FF0A84FF"/>
             <SolidColorBrush x:Key="CalHoverBrush" Color="#1CFFFFFF"/>
@@ -145,7 +145,7 @@
                         <TextBlock x:Name="TxtMonthSubtitle"
                                    Text="丙午马年 · 十月"
                                    FontFamily="Segoe UI Variable Text, -apple-system, PingFang SC, Microsoft YaHei UI"
-                                   FontSize="11"
+                                   FontSize="11.5"
                                    Margin="0,2,0,0"
                                    Foreground="{DynamicResource CalSecondaryFgBrush}"/>
                     </StackPanel>
@@ -228,7 +228,7 @@
                             <TextBlock x:Name="TxtSelectedLunar"
                                        Text="农历丙午(马)年 十月十九"
                                        FontFamily="Segoe UI Variable Text, -apple-system, PingFang SC, Microsoft YaHei UI"
-                                       FontSize="11"
+                                       FontSize="11.5"
                                        Margin="0,2.5,0,0"
                                        Foreground="{DynamicResource CalSecondaryFgBrush}"/>
                         </StackPanel>
