@@ -26,8 +26,8 @@
         <Border.Resources>
             <!-- 动态主题笔刷（默认深色，由 ApplyTheme 冻结并实时同步） -->
             <SolidColorBrush x:Key="CalFgBrush" Color="#FFF5F5F7"/>
-            <SolidColorBrush x:Key="CalSecondaryFgBrush" Color="#A6EBEBF5"/>
-            <SolidColorBrush x:Key="CalMutedFgBrush" Color="#74EBEBF5"/>
+            <SolidColorBrush x:Key="CalSecondaryFgBrush" Color="#CCEBEBF5"/>
+            <SolidColorBrush x:Key="CalMutedFgBrush" Color="#AEEBEBF5"/>
             <SolidColorBrush x:Key="CalWeekendFgBrush" Color="#C8FF9B94"/>
             <SolidColorBrush x:Key="CalAccentBrush" Color="#FF0A84FF"/>
             <SolidColorBrush x:Key="CalHoverBrush" Color="#1CFFFFFF"/>
